@@ -1,0 +1,7 @@
+import type { Channel } from 'stream-chat';
+export declare const useIsChannelMuted: (channel: Channel) => {
+    createdAt: Date | null;
+    expiresAt: Date | null;
+    muted: boolean;
+};
+//# sourceMappingURL=useIsChannelMuted.d.ts.map

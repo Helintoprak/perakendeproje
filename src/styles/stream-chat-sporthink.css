@@ -1,0 +1,192 @@
+/**
+ * Sporthink — Stream Chat Tema Override
+ *
+ * Stream Chat React v11+ CSS değişkenlerini override eder.
+ * Bu dosya sadece MeetingPage.tsx içinde import edilir, böylece
+ * uygulamanın geri kalan kısmını etkilemez.
+ *
+ * Renk paleti: Sporthink kurumsal kırmızı + nötr gri/beyaz.
+ */
+
+.str-chat__theme-light,
+.str-chat__channel,
+.str-chat__list,
+.str-chat__container {
+  /* Marka renkleri */
+  --str-chat__primary-color:           #D42B2B;   /* brand-red */
+  --str-chat__active-primary-color:    #B30000;   /* brand-redDark */
+  --str-chat__surface-color:           #F5F5F5;   /* brand-lightGray */
+  --str-chat__secondary-surface-color: #FFFFFF;
+  --str-chat__primary-surface-color:   #FFFFFF;
+  --str-chat__primary-surface-color-low-emphasis: #FCE9E9;
+
+  /* Mesaj baloncukları */
+  --str-chat__own-message-bubble-background-color: #D42B2B;
+  --str-chat__own-message-bubble-color:            #FFFFFF;
+  --str-chat__message-bubble-background-color:     #F5F5F5;
+  --str-chat__message-bubble-color:                #1F2937;
+  --str-chat__message-bubble-border-radius:        14px;
+
+  /* Tipografi — Slack/Discord hissi için bir tık büyük */
+  --str-chat__font-family:             "Inter", system-ui, -apple-system, sans-serif;
+  --str-chat__text-color:              #1F2937;       /* brand-black */
+  --str-chat__text-low-emphasis-color: #6B7280;       /* brand-gray */
+  --str-chat__body-text-line-height:   1.55;
+  --str-chat__body-text-font-size:     15px;
+  --str-chat__caption-text-font-size:  12px;
+
+  /* Border / radius */
+  --str-chat__border-radius-circle: 9999px;
+  --str-chat__border-radius-md:     12px;
+  --str-chat__border-radius-sm:     8px;
+  --str-chat__border-color:         #E5E7EB;          /* brand-border */
+}
+
+/* Channel header — kırmızı şerit yerine sade beyaz, alt çizgi */
+.sporthink-chat .str-chat__channel-header {
+  background-color: #FFFFFF;
+  border-bottom: 1px solid #E5E7EB;
+}
+.sporthink-chat .str-chat__channel-header .str-chat__avatar {
+  background: linear-gradient(135deg, #D42B2B, #B30000);
+  color: #FFFFFF;
+}
+
+/* Mesaj giriş alanı — kırmızı focus halkası */
+.sporthink-chat .str-chat__message-input {
+  background-color: #FFFFFF;
+  border-top: 1px solid #E5E7EB;
+}
+.sporthink-chat .str-chat__message-input .str-chat__textarea__textarea {
+  background-color: #F5F5F5;
+  border: 1px solid #E5E7EB;
+  border-radius: 12px;
+}
+.sporthink-chat .str-chat__message-input .str-chat__textarea__textarea:focus {
+  border-color: #D42B2B;
+  box-shadow: 0 0 0 3px rgba(212, 43, 43, 0.15);
+  outline: none;
+}
+
+/* Gönder butonu — marka kırmızısı */
+.sporthink-chat .str-chat__send-button {
+  background-color: #D42B2B;
+  color: #FFFFFF;
+}
+.sporthink-chat .str-chat__send-button:hover:not(:disabled) {
+  background-color: #B30000;
+}
+
+/* Reaction selector — emoji menüsü */
+.sporthink-chat .str-chat__reaction-list {
+  background-color: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  border-radius: 12px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+}
+
+/* "yazıyor..." göstergesi */
+.sporthink-chat .str-chat__typing-indicator__dots span {
+  background-color: #D42B2B;
+}
+
+/* Liste scrollbar */
+.sporthink-chat .str-chat__list::-webkit-scrollbar { width: 6px; }
+.sporthink-chat .str-chat__list::-webkit-scrollbar-thumb {
+  background: rgba(212, 43, 43, 0.25);
+  border-radius: 3px;
+}
+.sporthink-chat .str-chat__list::-webkit-scrollbar-thumb:hover {
+  background: rgba(212, 43, 43, 0.45);
+}
+
+/* Genel kapsayıcı yuvarlaklık */
+.sporthink-chat .str-chat__channel {
+  border-radius: 0;
+  overflow: hidden;
+  border: none;
+}
+
+/* Channel list — kanal seçim panelinin sade görünümü */
+.sporthink-chat .str-chat__channel-list {
+  background-color: #FFFFFF;
+}
+.sporthink-chat .str-chat__channel-list-messenger,
+.sporthink-chat .str-chat__channel-list-messenger__main {
+  background-color: #FFFFFF;
+  padding: 6px;
+}
+.sporthink-chat .str-chat__channel-preview-messenger {
+  border-radius: 10px;
+  margin-bottom: 4px;
+  padding: 8px 10px;
+}
+.sporthink-chat .str-chat__channel-preview-messenger:hover {
+  background-color: #F5F5F5;
+}
+/* Aktif/seçili kanal — kırmızı vurgu */
+.sporthink-chat .str-chat__channel-preview-messenger--active {
+  background-color: #FCE9E9 !important;
+  border-left: 3px solid #D42B2B;
+}
+.sporthink-chat .str-chat__channel-preview-messenger--active
+.str-chat__channel-preview-messenger__name {
+  color: #D42B2B;
+  font-weight: 700;
+}
+
+/* ─── Tam-bleed iyileştirmeleri ─── */
+
+/* Sayfa wrapper — taşmayı engelle (ana flex container scrollable değil) */
+.sporthink-chat {
+  overflow: hidden;
+}
+
+/* Channel/Window içerikleri tam yükseklik */
+.sporthink-chat .str-chat,
+.sporthink-chat .str-chat__container,
+.sporthink-chat .str-chat__main-panel,
+.sporthink-chat .str-chat__channel {
+  height: 100%;
+  max-height: 100%;
+}
+
+/* Message list — daha rahat üst/alt boşluk + scroll içeride */
+.sporthink-chat .str-chat__list,
+.sporthink-chat .str-chat__main-panel-inner {
+  padding: 8px 16px;
+}
+.sporthink-chat .str-chat__message-bubble {
+  padding: 10px 14px;
+  font-size: 15px;
+}
+.sporthink-chat .str-chat__message-simple-name {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* Channel header — biraz daha hava (Slack-style) */
+.sporthink-chat .str-chat__channel-header {
+  padding: 12px 20px;
+  min-height: 60px;
+}
+
+/* Modern composer — alt yaslı, tam genişlik, iç padding */
+.sporthink-chat .str-chat__message-input {
+  padding: 12px 16px 14px;
+  border-top: 1px solid #E5E7EB;
+}
+.sporthink-chat .str-chat__textarea__textarea {
+  font-size: 15px;
+  padding: 12px 14px;
+  min-height: 44px;
+}
+
+/* Channel list öğelerinde isim/önizleme bir tık daha okunaklı */
+.sporthink-chat .str-chat__channel-preview-messenger__name {
+  font-size: 14px;
+  font-weight: 600;
+}
+.sporthink-chat .str-chat__channel-preview-messenger__last-message {
+  font-size: 12px;
+}

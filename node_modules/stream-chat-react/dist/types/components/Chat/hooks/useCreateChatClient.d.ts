@@ -1,0 +1,12 @@
+import { StreamChat } from 'stream-chat';
+import type { OwnUserResponse, StreamChatOptions, TokenOrProvider, UserResponse } from 'stream-chat';
+/**
+ * React hook to create, connect and return `StreamChat` client.
+ */
+export declare const useCreateChatClient: ({ apiKey, options, tokenOrProvider, userData, }: {
+    apiKey: string;
+    tokenOrProvider: TokenOrProvider;
+    userData: OwnUserResponse | UserResponse;
+    options?: StreamChatOptions;
+}) => StreamChat | null;
+//# sourceMappingURL=useCreateChatClient.d.ts.map
