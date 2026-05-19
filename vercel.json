@@ -1,4 +1,12 @@
 {
-  "buildCommand": "npx vite build",
-  "installCommand": "npm install --legacy-peer-deps"
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://sporthink-backend.onrender.com/api/:path*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
 }

@@ -30,14 +30,6 @@ interface FeedbackItem {
   fileName?: string;
 }
 
-/**
- * Kategori renk eşlemesi — Sporthink standart kategorileri:
- *   Pozitif    (Yüksek Performans) → Yeşil
- *   Yapıcı     (Gelişime Açık)     → Sarı/Turuncu (amber)
- *   Odaklanmış (Düşük Performans)  → Mavi
- *
- * Geriye dönük uyumluluk: eski "tebrik/uyarı/eğitim" isimleri de tanınır.
- */
 function getCatColor(name: string) {
   const n = (name || '').toLowerCase();
 
@@ -61,6 +53,21 @@ function getCatColor(name: string) {
     return { dot: 'bg-blue-500', bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200', btnActive: 'bg-blue-600 text-white border-blue-600' };
   }
   return { dot: 'bg-brand-gray', bg: 'bg-brand-lightGray', text: 'text-brand-gray', border: 'border-brand-border', btnActive: 'bg-brand-black text-white border-brand-black' };
+}
+
+function getTemplateMessage(categoryName: string): string {
+  const n = (categoryName || '').toLowerCase();
+
+  if (n.includes('pozitif') || n.includes('tebrik')) {
+    return 'Göstermiş olduğunuz başarılı performans, özverili çalışma ve mağazaya kattığınız pozitif enerji için teşekkür ederiz. Başarılarınızın devamını dilerim!';
+  }
+  if (n.includes('yapıcı') || n.includes('yapici')) {
+    return 'Mevcut çalışmalarınız gayet iyi, ancak operasyonel süreçlerin daha verimli ilerlemesi adına eksik görülen noktaların tamamlanmasını ve süreç takibine biraz daha dikkat edilmesini rica ederim.';
+  }
+  if (n.includes('odakl')) {
+    return 'Bu dönem belirlenen öncelikli hedeflere, süreç takibine ve mağaza içi kritik operasyonlara tam odaklanma göstermenizi bekliyorum. Çalışmalarınızda kolaylıklar.';
+  }
+  return '';
 }
 
 function FileAttachment({ url, name }: { url: string; name: string }) {
@@ -372,7 +379,15 @@ export default function FeedbackPage() {
                             <button
                               key={cat.categoryId}
                               type="button"
-                              onClick={() => setCategoryId(isActive ? null : cat.categoryId)}
+                              onClick={() => {
+                                if (isActive) {
+                                  setCategoryId(null);
+                                  setMessage('');
+                                } else {
+                                  setCategoryId(cat.categoryId);
+                                  setMessage(getTemplateMessage(cat.categoryName));
+                                }
+                              }}
                               className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold border transition-all ${
                                 isActive ? (colors.btnActive) : 'bg-white text-brand-gray border-brand-border hover:bg-brand-lightGray'
                               }`}
