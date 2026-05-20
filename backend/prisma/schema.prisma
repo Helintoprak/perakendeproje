@@ -1,0 +1,451 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Region {
+  regionId   Int     @id @default(autoincrement()) @map("RegionID")
+  regionName String  @map("RegionName") @db.VarChar(50)
+  stores     Store[]
+
+  @@map("regions")
+}
+
+model Store {
+  storeId            Int                 @id @default(autoincrement()) @map("StoreID")
+  storeName          String              @map("StoreName") @db.VarChar(100)
+  regionId           Int                 @map("RegionID")
+  location           String?             @map("Location") @db.VarChar(255)
+  feedbackForms      FeedbackForm[]
+  importLogs         ImportLog[]
+  performanceActuals PerformanceActual[]
+  performanceGoals   PerformanceGoal[]
+  region             Region              @relation(fields: [regionId], references: [regionId])
+  users              User[]
+  shifts             Shift[]
+  leaveRequests      LeaveRequest[]
+  pulseSurveys       PulseSurvey[]
+
+  @@index([regionId])
+  @@map("stores")
+}
+
+model Role {
+  roleId          Int              @id @default(autoincrement()) @map("RoleID")
+  roleName        String           @map("RoleName") @db.VarChar(50)
+  users           User[]
+  promotionsFrom  PromotionLog[]   @relation("OldRole")
+  promotionsTo    PromotionLog[]   @relation("NewRole")
+
+  @@map("roles")
+}
+
+model User {
+  userId               Int                   @id @default(autoincrement()) @map("UserID")
+  fullName             String                @map("FullName") @db.VarChar(100)
+  email                String                @map("Email") @db.VarChar(100)
+  password             String?               @map("Password") @db.VarChar(255)
+  roleId               Int                   @map("RoleID")
+  storeId              Int?                  @map("StoreID")
+  status               Int                   @default(1) @map("Status") @db.SmallInt
+  communityPosts       CommunityPost[]
+  comments             Comment[]
+  courseAssignments    CourseAssignment[]
+  evaluatedFeedbacks   FeedbackForm[]        @relation("FeedbackEvaluator")
+  targetedFeedbacks    FeedbackForm[]        @relation("FeedbackTarget")
+  feedbackForms        FeedbackForm[]        @relation("FeedbackUser")
+  notifications        Notification[]
+  performanceActuals   PerformanceActual[]
+  performanceGoals     PerformanceGoal[]
+  pulseResponses       PulseResponse[]
+  createdSurveys       PulseSurvey[]         @relation("PulseSurveyCreator")
+  quizAttempts         QuizAttempt[]
+  userProgress         UserProgress[]
+  partProgress         UserPartProgress[]
+  uploadedEducations   Education[]           @relation("EducationUploader")
+  educationAssignments EducationAssignment[] @relation("EducationAssignee")
+  shifts               Shift[]
+  leaveRequests        LeaveRequest[]
+  promotions           PromotionLog[]        @relation("PromotedUser")
+  givenPromotions      PromotionLog[]        @relation("Promoter")
+  role                 Role                  @relation(fields: [roleId], references: [roleId])
+  store                Store?                @relation(fields: [storeId], references: [storeId])
+
+  @@index([storeId])
+  @@index([roleId])
+  @@map("users")
+}
+
+model CourseCategory {
+  categoryId   Int      @id @default(autoincrement()) @map("CategoryID")
+  categoryName String   @map("CategoryName") @db.VarChar(100)
+  courses      Course[]
+
+  @@map("course_categories")
+}
+
+model Course {
+  courseId          Int                @id @default(autoincrement()) @map("CourseID")
+  title             String             @map("Title") @db.VarChar(150)
+  description       String?            @map("Description") @db.Text
+  contentUrl        String?            @map("ContentURL") @db.VarChar(1024)
+  coverImage        String?            @map("CoverImage") @db.VarChar(1024)
+  duration          Int?               @map("Duration")
+  categoryId        Int?               @map("CategoryID")
+  totalParts        Int                @default(1) @map("TotalParts")
+  courseAssignments CourseAssignment[]
+  category          CourseCategory?    @relation(fields: [categoryId], references: [categoryId])
+  quizzes           Quiz[]
+  userProgress      UserProgress[]
+  parts             CoursePart[]
+  partProgress      UserPartProgress[]
+
+  @@index([categoryId])
+  @@map("courses")
+}
+
+model CoursePart {
+  partId     Int    @id @default(autoincrement()) @map("PartID")
+  courseId   Int    @map("CourseID")
+  partNumber Int    @map("PartNumber")
+  title      String @map("Title") @db.VarChar(200)
+  startPage  Int?   @map("StartPage")
+  endPage    Int?   @map("EndPage")
+  course     Course @relation(fields: [courseId], references: [courseId], onDelete: Cascade)
+
+  @@unique([courseId, partNumber])
+  @@index([courseId])
+  @@map("course_parts")
+}
+
+model UserPartProgress {
+  id          Int      @id @default(autoincrement())
+  userId      Int      @map("UserID")
+  courseId    Int      @map("CourseID")
+  partNumber  Int      @map("PartNumber")
+  completedAt DateTime @default(now()) @map("CompletedAt")
+  user        User     @relation(fields: [userId], references: [userId])
+  course      Course   @relation(fields: [courseId], references: [courseId], onDelete: Cascade)
+
+  @@unique([userId, courseId, partNumber])
+  @@index([userId])
+  @@index([courseId])
+  @@map("user_part_progress")
+}
+
+model Quiz {
+  quizId         Int           @id @default(autoincrement()) @map("QuizID")
+  courseId       Int           @map("CourseID")
+  quizTitle      String        @map("QuizTitle") @db.VarChar(150)
+  passScore      Int?          @map("PassScore")
+  totalQuestions Int?          @map("TotalQuestions")
+  questionData   Json?         @map("QuestionData")
+  quizAttempts   QuizAttempt[]
+  course         Course        @relation(fields: [courseId], references: [courseId])
+
+  @@index([courseId])
+  @@map("quizzes")
+}
+
+model QuizAttempt {
+  attemptId   Int      @id @default(autoincrement()) @map("AttemptID")
+  userId      Int      @map("UserID")
+  quizId      Int      @map("QuizID")
+  score       Int?     @map("Score")
+  isPassed    Boolean? @map("IsPassed")
+  attemptDate DateTime @default(now()) @map("AttemptDate")
+  quiz        Quiz     @relation(fields: [quizId], references: [quizId])
+  user        User     @relation(fields: [userId], references: [userId])
+
+  @@index([quizId])
+  @@index([userId])
+  @@map("quiz_attempts")
+}
+
+model UserProgress {
+  progressId     Int       @id @default(autoincrement()) @map("ProgressID")
+  userId         Int       @map("UserID")
+  courseId       Int       @map("CourseID")
+  completionRate Decimal   @default(0.00) @map("CompletionRate") @db.Decimal(5, 2)
+  status         String    @default("not_started") @map("Status") @db.VarChar(20)
+  startedDate    DateTime? @map("StartedDate")
+  lastAccess     DateTime? @updatedAt @map("LastAccess")
+  course         Course    @relation(fields: [courseId], references: [courseId])
+  user           User      @relation(fields: [userId], references: [userId])
+
+  @@unique([userId, courseId])
+  @@index([courseId])
+  @@index([userId])
+  @@map("userprogress")
+}
+
+model CourseAssignment {
+  assignmentId Int       @id @default(autoincrement()) @map("AssignmentID")
+  userId       Int       @map("UserID")
+  courseId     Int       @map("CourseID")
+  assignedDate DateTime  @default(now()) @map("AssignedDate")
+  deadline     DateTime? @map("Deadline")
+  isMandatory  Boolean   @default(false) @map("IsMandatory")
+  course       Course    @relation(fields: [courseId], references: [courseId])
+  user         User      @relation(fields: [userId], references: [userId])
+
+  @@index([courseId])
+  @@index([userId])
+  @@map("courseassignments")
+}
+
+model KpiDefinition {
+  kpiId              Int                 @id @default(autoincrement()) @map("KPI_ID")
+  kpiName            String              @map("KPIname") @db.VarChar(100)
+  unit               String?             @map("Unit") @db.VarChar(20)
+  description        String?             @map("Description") @db.Text
+  performanceActuals PerformanceActual[]
+  performanceGoals   PerformanceGoal[]
+
+  @@map("kpi_definitions")
+}
+
+model PerformanceActual {
+  actualId    Int           @id @default(autoincrement()) @map("ActualID")
+  userId      Int           @map("UserID")
+  kpiId       Int           @map("KPI_ID")
+  actualValue Decimal       @map("ActualValue") @db.Decimal(15, 2)
+  recordDate  DateTime      @map("RecordDate") @db.Date
+  storeId     Int?          @map("StoreID")
+  kpi         KpiDefinition @relation(fields: [kpiId], references: [kpiId])
+  store       Store?        @relation(fields: [storeId], references: [storeId])
+  user        User          @relation(fields: [userId], references: [userId])
+
+  @@index([kpiId])
+  @@index([storeId])
+  @@index([userId])
+  @@map("performanceactuals")
+}
+
+model PerformanceGoal {
+  goalId      Int           @id @default(autoincrement()) @map("GoalID")
+  userId      Int           @map("UserID")
+  kpiId       Int           @map("KPI_ID")
+  targetValue Decimal       @map("TargetValue") @db.Decimal(15, 2)
+  month       Int           @map("Month") @db.SmallInt
+  year        Int           @map("Year") @db.SmallInt
+  storeId     Int?          @map("StoreID")
+  createdAt   DateTime      @default(now()) @map("CreatedAt")
+  kpi         KpiDefinition @relation(fields: [kpiId], references: [kpiId])
+  user        User          @relation(fields: [userId], references: [userId])
+  store       Store?        @relation(fields: [storeId], references: [storeId])
+
+  @@index([kpiId])
+  @@index([userId])
+  @@index([storeId])
+  @@map("performancegoals")
+}
+
+model FeedbackCategory {
+  categoryId   Int            @id @default(autoincrement()) @map("CategoryID")
+  categoryName String         @map("CategoryName") @db.VarChar(100)
+  description  String?        @map("Description") @db.Text
+  feedbacks    FeedbackForm[]
+
+  @@map("feedback_categories")
+}
+
+model FeedbackForm {
+  feedbackId   Int               @id @default(autoincrement()) @map("FeedbackID")
+  userId       Int               @map("UserID")
+  categoryId   Int?              @map("CategoryID")
+  storeId      Int?              @map("StoreID")
+  subject      String            @map("Subject") @db.VarChar(150)
+  message      String            @map("Message") @db.VarChar(255)
+  rating       Int?              @map("Rating") @db.SmallInt
+  status       String            @default("pending") @map("Status") @db.VarChar(20)
+  createdAt    DateTime          @default(now()) @map("CreatedAt")
+  evaluatorId  Int?              @map("EvaluatorID")
+  direction    String            @default("up") @map("Direction") @db.VarChar(10)
+  targetUserId Int?              @map("TargetUserID")
+  category     FeedbackCategory? @relation(fields: [categoryId], references: [categoryId])
+  evaluator    User?             @relation("FeedbackEvaluator", fields: [evaluatorId], references: [userId])
+  store        Store?            @relation(fields: [storeId], references: [storeId])
+  targetUser   User?             @relation("FeedbackTarget", fields: [targetUserId], references: [userId])
+  user         User              @relation("FeedbackUser", fields: [userId], references: [userId])
+  fileUrl      String?           @map("FileURL") @db.VarChar(1024)
+  fileName     String?           @map("FileName") @db.VarChar(255)
+
+  @@index([categoryId])
+  @@index([evaluatorId])
+  @@index([storeId])
+  @@index([userId])
+  @@index([targetUserId])
+  @@map("feedbackforms")
+}
+
+model Notification {
+  notifId   Int      @id @default(autoincrement()) @map("NotifID")
+  userId    Int      @map("UserID")
+  type      String   @map("Type") @db.VarChar(50)
+  message   String   @map("Message") @db.VarChar(255)
+  isRead    Boolean  @default(false) @map("IsRead")
+  createdAt DateTime @default(now()) @map("CreatedAt")
+  user      User     @relation(fields: [userId], references: [userId])
+
+  @@index([userId])
+  @@map("notifications")
+}
+
+model CommunityPost {
+  postId    Int       @id @default(autoincrement()) @map("PostID")
+  userId    Int       @map("UserID")
+  title     String    @map("Title") @db.VarChar(150)
+  content   String?   @map("Content") @db.Text
+  imageUrl  String?   @map("ImageURL") @db.VarChar(1024)
+  category  String    @default("genel") @map("Category") @db.VarChar(50)
+  likeCount Int       @default(0) @map("LikeCount")
+  status    String    @default("active") @map("Status") @db.VarChar(20)
+  createdAt DateTime  @default(now()) @map("CreatedAt")
+  user      User      @relation(fields: [userId], references: [userId])
+  comments  Comment[]
+
+  @@index([userId])
+  @@map("communityposts")
+}
+
+model Comment {
+  commentId Int           @id @default(autoincrement()) @map("CommentID")
+  postId    Int           @map("PostID")
+  userId    Int           @map("UserID")
+  content   String        @map("Content") @db.Text
+  createdAt DateTime      @default(now()) @map("CreatedAt")
+  post      CommunityPost @relation(fields: [postId], references: [postId], onDelete: Cascade)
+  user      User          @relation(fields: [userId], references: [userId])
+
+  @@index([postId])
+  @@index([userId])
+  @@map("comments")
+}
+
+model PulseSurvey {
+  surveyId    Int             @id @default(autoincrement()) @map("SurveyID")
+  createdBy   Int             @map("CreatedBy")
+  storeId     Int?            @map("StoreID")
+  title       String          @map("Title") @db.VarChar(255)
+  description String          @map("Description") @db.VarChar(500)
+  questions   Json            @map("Questions")
+  isActive    Boolean         @default(true) @map("IsActive")
+  createdAt   DateTime        @default(now()) @map("CreatedAt")
+  creator     User            @relation("PulseSurveyCreator", fields: [createdBy], references: [userId])
+  store       Store?          @relation(fields: [storeId], references: [storeId])
+  responses   PulseResponse[]
+
+  @@index([storeId])
+  @@index([createdBy])
+  @@map("pulse_surveys")
+}
+
+model PulseResponse {
+  responseId  Int          @id @default(autoincrement()) @map("ResponseID")
+  surveyId    Int          @map("SurveyID")
+  userId      Int          @map("UserID")
+  ratings     Json         @map("Ratings")
+  createdAt   DateTime     @default(now()) @map("CreatedAt")
+  survey      PulseSurvey  @relation(fields: [surveyId], references: [surveyId], onDelete: Cascade)
+  user        User         @relation(fields: [userId], references: [userId])
+
+  @@unique([surveyId, userId])
+  @@index([userId])
+  @@map("pulse_responses")
+}
+
+model Education {
+  id          Int                   @id @default(autoincrement())
+  title       String                @db.VarChar(255)
+  fileUrl     String                @db.VarChar(1024)
+  createdAt   DateTime              @default(now())
+  uploadedBy  Int
+  uploader    User                  @relation("EducationUploader", fields: [uploadedBy], references: [userId])
+  assignments EducationAssignment[]
+
+  @@index([uploadedBy])
+  @@map("educations")
+}
+
+model EducationAssignment {
+  id          Int       @id @default(autoincrement())
+  educationId Int
+  userId      Int
+  assignedAt  DateTime  @default(now())
+  isMandatory Boolean   @default(false)
+  viewedAt    DateTime?
+  education   Education @relation(fields: [educationId], references: [id], onDelete: Cascade)
+  user        User      @relation("EducationAssignee", fields: [userId], references: [userId])
+
+  @@unique([educationId, userId])
+  @@index([userId])
+  @@map("education_assignments")
+}
+
+model ImportLog {
+  logId        Int      @id @default(autoincrement()) @map("Log_ID")
+  storeId      Int      @map("StoreID")
+  sourceSystem String   @map("SourceSystem") @db.VarChar(50)
+  importedAt   DateTime @default(now()) @map("ImportedAt")
+  status       String   @map("Status") @db.VarChar(20)
+  store        Store    @relation(fields: [storeId], references: [storeId])
+
+  @@index([storeId])
+  @@map("import_log")
+}
+
+model Shift {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("UserID")
+  storeId   Int      @map("StoreID")
+  date      DateTime @map("Date") @db.Date
+  shiftType String   @default("OFF") @map("ShiftType") @db.VarChar(20)
+  createdAt DateTime @default(now()) @map("CreatedAt")
+  user      User     @relation(fields: [userId], references: [userId])
+  store     Store    @relation(fields: [storeId], references: [storeId])
+
+  @@unique([userId, date])
+  @@index([storeId])
+  @@map("shift_entries")
+}
+
+model LeaveRequest {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("UserID")
+  storeId   Int      @map("StoreID")
+  startDate DateTime @map("StartDate") @db.Date
+  endDate   DateTime @map("EndDate") @db.Date
+  reason    String   @map("Reason") @db.VarChar(500)
+  status    String   @default("pending") @map("Status") @db.VarChar(20)
+  createdAt DateTime @default(now()) @map("CreatedAt")
+  user      User     @relation(fields: [userId], references: [userId])
+  store     Store    @relation(fields: [storeId], references: [storeId])
+
+  @@index([userId])
+  @@index([storeId])
+  @@map("leave_requests")
+}
+
+model PromotionLog {
+  id         Int      @id @default(autoincrement())
+  userId     Int      @map("UserID")
+  oldRoleId  Int      @map("OldRoleID")
+  newRoleId  Int      @map("NewRoleID")
+  promotedBy Int      @map("PromotedBy")
+  note       String?  @map("Note") @db.VarChar(500)
+  createdAt  DateTime @default(now()) @map("CreatedAt")
+
+  user     User @relation("PromotedUser", fields: [userId], references: [userId])
+  promoter User @relation("Promoter", fields: [promotedBy], references: [userId])
+  oldRole  Role @relation("OldRole", fields: [oldRoleId], references: [roleId])
+  newRole  Role @relation("NewRole", fields: [newRoleId], references: [roleId])
+
+  @@index([userId])
+  @@index([promotedBy])
+  @@map("promotion_logs")
+}
