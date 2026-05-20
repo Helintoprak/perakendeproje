@@ -53,10 +53,10 @@ router.post(
 // PATCH /api/educations/:educationId/view — görüntülendi olarak işaretle
 router.patch('/:educationId/view', markAsViewed);
 
-// DELETE /api/educations/:id
+// DELETE /api/educations/:id — sadece Admin ve Mağaza Müdürü
 router.delete(
   '/:id',
-  requireRole('Mağaza Müdürü', 'Mağaza Müdür Yardımcısı', 'Admin'),
+  requireRole('Mağaza Müdürü', 'Admin'),
   deleteEducation
 );
 

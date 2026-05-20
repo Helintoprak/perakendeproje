@@ -14,28 +14,10 @@ const ALLOWED_CONTENT_MIME = [
 ];
 const ALLOWED_CONTENT_EXT = ['.pdf', '.pptx', '.ppt', '.mp4', '.webm', '.mov'];
 
-// Otomatik kapak görseli için kabul edilen tipler (frontend tarafından üretilir)
-const ALLOWED_COVER_MIME = ['image/jpeg', 'image/png', 'image/webp'];
-const ALLOWED_COVER_EXT  = ['.jpg', '.jpeg', '.png', '.webp'];
-
 const UPLOADS_DIR = process.env.UPLOADS_DIR || path.join(__dirname, '../../uploads');
 
-/**
- * Alan-bazlı validation:
- *   • file       → PDF/PPTX/PPT/MP4/WEBM/MOV (eğitim içeriği)
- *   • coverImage → JPG/PNG/WEBP (otomatik üretilen kapak görseli)
- */
 const fileFilter = (_req: Request, file: Express.Multer.File, cb: FileFilterCallback) => {
   const ext = path.extname(file.originalname).toLowerCase();
-
-  if (file.fieldname === 'coverImage') {
-    if (ALLOWED_COVER_MIME.includes(file.mimetype) && ALLOWED_COVER_EXT.includes(ext)) {
-      return cb(null, true);
-    }
-    return cb(new Error(`Kapak görseli için geçersiz tip: "${ext}". JPG/PNG/WEBP olmalı.`));
-  }
-
-  // Varsayılan: ana içerik dosyası
   if (ALLOWED_CONTENT_MIME.includes(file.mimetype) && ALLOWED_CONTENT_EXT.includes(ext)) {
     return cb(null, true);
   }
@@ -57,30 +39,14 @@ function buildStorage(): StorageEngine {
     return new CloudinaryStorage({
       cloudinary,
       params: async (_req, file) => {
-        // Field adına göre subfolder ve resource_type belirle
-        const isCover = file.fieldname === 'coverImage';
         const isVideo = file.mimetype.startsWith('video/');
-        const isImage = file.mimetype.startsWith('image/');
-
-        let subfolder = 'misc';
-        if (isCover)                        subfolder = 'covers';
-        else if (file.fieldname === 'file') subfolder = 'courses';
-
-        const resource_type: 'image' | 'video' | 'raw' | 'auto' =
-          isImage ? 'image' :
-          isVideo ? 'video' :
-          'raw'; // PDF/PPTX vb.
-
-        // Public id: orijinal isimden temizlenmiş + epoch
-        const ext = path.extname(file.originalname).toLowerCase();
+        const resource_type: 'video' | 'raw' = isVideo ? 'video' : 'raw';
+        const ext  = path.extname(file.originalname).toLowerCase();
         const safe = path.basename(file.originalname, ext).replace(/[^a-zA-Z0-9_\-]/g, '_');
-
         return {
-          folder:        `sporthink/${subfolder}`,
+          folder:        'sporthink/courses',
           resource_type,
           public_id:     `${Date.now()}_${safe}`,
-          // PDF/raw için Cloudinary varsayılan olarak format'ı korur,
-          // image/video'ya ek dönüşüm yapmıyoruz (orijinal kalite)
         };
       },
     });
@@ -94,8 +60,7 @@ function buildStorage(): StorageEngine {
     filename: (_req, file, cb) => {
       const ext = path.extname(file.originalname).toLowerCase();
       const safeName = path.basename(file.originalname, ext).replace(/[^a-zA-Z0-9_\-]/g, '_');
-      const prefix = file.fieldname === 'coverImage' ? 'cover_' : '';
-      cb(null, `${prefix}${Date.now()}_${safeName}${ext}`);
+      cb(null, `${Date.now()}_${safeName}${ext}`);
     },
   });
 }

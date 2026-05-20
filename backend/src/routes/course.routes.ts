@@ -178,10 +178,8 @@ router.post(
   '/upload',
   requireRole(...CAN_MANAGE),
   (req: Request, res: Response, next: NextFunction) => {
-    // İki dosya alanı: 'file' (içerik, zorunlu) + 'coverImage' (otomatik kapak, opsiyonel)
     upload.fields([
-      { name: 'file',       maxCount: 1 },
-      { name: 'coverImage', maxCount: 1 },
+      { name: 'file', maxCount: 1 },
     ])(req, res, (err) => {
       if (err) return handleUploadError(err, req, res, next);
       next();
@@ -196,7 +194,6 @@ router.post(
       // .fields() kullandığımız için req.file yerine req.files (alan adına göre indekslenir)
       const files = req.files as { [field: string]: Express.Multer.File[] } | undefined;
       const contentFile = files?.file?.[0];
-      const coverFile   = files?.coverImage?.[0];
 
       if (!contentFile) {
         return res.status(400).json({ message: 'Dosya yüklenmedi. Lütfen bir PDF/PPTX/Video seçin.' });
@@ -221,10 +218,7 @@ router.post(
       }
 
       const mandatorySet = new Set(rawMandatoryIds.map(Number));
-      // Cloudinary modunda tam HTTPS URL, disk modunda /uploads/<filename> döner
-      const fileUrl      = fileUrlFromUpload(contentFile);
-      // Frontend'in pdfjs / video-canvas ile ürettiği kapak görseli (varsa)
-      const coverUrl     = coverFile ? fileUrlFromUpload(coverFile) : null;
+      const fileUrl = fileUrlFromUpload(contentFile);
 
       const course = await prisma.$transaction(async (tx) => {
         const c = await tx.course.create({
@@ -232,7 +226,7 @@ router.post(
             title:       effectiveTitle,
             description: description?.trim() || null,
             contentUrl:  fileUrl,
-            coverImage:  coverUrl,
+            coverImage:  null,
             duration:    duration   ? parseInt(duration)   : null,
             categoryId:  categoryId ? parseInt(categoryId) : null,
             totalParts,
@@ -454,6 +448,49 @@ router.post('/:id/parts/:partNum/complete', async (req: AuthRequest, res: Respon
   } catch (err) {
     console.error('[POST /courses/:id/parts/:partNum/complete]', err);
     return res.status(500).json({ message: 'Bölüm tamamlanamadı.' });
+  }
+});
+
+// ─── DELETE /api/courses/:id ─────────────────────────────────────────────────
+router.delete('/:id', requireRole('Mağaza Müdürü', 'Admin'), async (req: AuthRequest, res: Response) => {
+  try {
+    const courseId = parseInt(req.params.id);
+    if (isNaN(courseId)) return res.status(400).json({ message: 'Geçersiz kurs ID.' });
+
+    const course = await prisma.course.findUnique({ where: { courseId } });
+    if (!course) return res.status(404).json({ message: 'Kurs bulunamadı.' });
+
+    // Cloudinary'de yüklü dosyayı sil
+    if (course.contentUrl?.startsWith('http')) {
+      try {
+        const { cloudinary, isCloudinaryConfigured } = await import('../services/cloudinary.service');
+        if (isCloudinaryConfigured()) {
+          const urlPath = new URL(course.contentUrl).pathname;
+          const isVideo = urlPath.includes('/video/upload/');
+          const match   = urlPath.match(/\/(?:raw|image|video)\/upload\/(?:v\d+\/)?(.+)$/);
+          if (match) {
+            await cloudinary.uploader.destroy(match[1], {
+              resource_type: isVideo ? 'video' : 'raw',
+            }).catch(() => {});
+          }
+        }
+      } catch { /* Cloudinary hatası DB silmeyi engellemesin */ }
+    }
+
+    // İlişkili tüm kayıtları transaction içinde sil, ardından kursu sil
+    await prisma.$transaction([
+      prisma.userPartProgress.deleteMany({ where: { courseId } }),
+      prisma.userProgress.deleteMany({ where: { courseId } }),
+      prisma.quizAttempt.deleteMany({ where: { quiz: { courseId } } }),
+      prisma.quiz.deleteMany({ where: { courseId } }),
+      prisma.courseAssignment.deleteMany({ where: { courseId } }),
+      prisma.coursePart.deleteMany({ where: { courseId } }),
+      prisma.course.delete({ where: { courseId } }),
+    ]);
+    return res.json({ message: 'Kurs başarıyla silindi.' });
+  } catch (err: any) {
+    console.error('[DELETE /courses/:id]', err.message);
+    return res.status(500).json({ message: 'Silme işlemi başarısız: ' + err.message });
   }
 });
 

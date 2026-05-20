@@ -44,58 +44,63 @@ export async function listStoreUsers(req: AuthRequest, res: Response) {
 // POST /api/educations/upload
 // Body (multipart): file + userIds (JSON string array) + mandatoryIds (JSON string array)
 export async function uploadEducation(req: AuthRequest, res: Response) {
-  if (!req.file) {
-    return res.status(400).json({ message: 'Dosya yüklenmedi. Lütfen bir PDF veya PPTX dosyası seçin.' });
-  }
-
-  let userIds: number[] = [];
   try {
-    userIds = JSON.parse(req.body.userIds ?? '[]');
-    if (!Array.isArray(userIds) || userIds.length === 0) throw new Error();
-  } catch {
-    return res.status(400).json({ message: 'En az bir kullanıcı seçilmelidir.' });
+    if (!req.file) {
+      return res.status(400).json({ message: 'Dosya yüklenmedi. Lütfen bir PDF veya PPTX dosyası seçin.' });
+    }
+
+    let userIds: number[] = [];
+    try {
+      userIds = JSON.parse(req.body.userIds ?? '[]');
+      if (!Array.isArray(userIds) || userIds.length === 0) throw new Error();
+    } catch {
+      return res.status(400).json({ message: 'En az bir kullanıcı seçilmelidir.' });
+    }
+
+    let mandatoryIds: number[] = [];
+    try {
+      mandatoryIds = JSON.parse(req.body.mandatoryIds ?? '[]');
+    } catch { /* boş kalabilir */ }
+    const mandatorySet = new Set(mandatoryIds);
+
+    const { originalname } = req.file;
+    // Cloudinary modunda tam HTTPS URL, disk modunda /uploads/<filename> döner
+    const fileUrl = fileUrlFromUpload(req.file);
+
+    const education = await prisma.education.create({
+      data: {
+        title: originalname,
+        fileUrl,
+        uploadedBy: req.user!.userId,
+        assignments: {
+          create: userIds.map((userId) => ({
+            userId,
+            isMandatory: mandatorySet.has(userId),
+          })),
+        },
+      },
+      include: {
+        assignments: {
+          include: { user: { select: { fullName: true, role: { select: { roleName: true } } } } },
+        },
+      },
+    });
+
+    // accessUrl: Cloudinary URL'i ise zaten tam https://... — olduğu gibi gönder.
+    // Disk modunda relative path (/uploads/...) → PUBLIC_BASE_URL veya localhost ekle.
+    const accessUrl = fileUrl.startsWith('http')
+      ? fileUrl
+      : `${process.env.PUBLIC_BASE_URL ?? `http://localhost:${process.env.PORT || 3000}`}${fileUrl}`;
+
+    return res.status(201).json({
+      message: `Dosya başarıyla yüklendi ve ${userIds.length} kullanıcıya atandı.`,
+      education,
+      accessUrl,
+    });
+  } catch (err: any) {
+    console.error('[uploadEducation]', err.message);
+    return res.status(500).json({ message: 'Yükleme başarısız: ' + err.message });
   }
-
-  let mandatoryIds: number[] = [];
-  try {
-    mandatoryIds = JSON.parse(req.body.mandatoryIds ?? '[]');
-  } catch { /* boş kalabilir */ }
-  const mandatorySet = new Set(mandatoryIds);
-
-  const { originalname } = req.file;
-  // Cloudinary modunda tam HTTPS URL, disk modunda /uploads/<filename> döner
-  const fileUrl = fileUrlFromUpload(req.file);
-
-  const education = await prisma.education.create({
-    data: {
-      title: originalname,
-      fileUrl,
-      uploadedBy: req.user!.userId,
-      assignments: {
-        create: userIds.map((userId) => ({
-          userId,
-          isMandatory: mandatorySet.has(userId),
-        })),
-      },
-    },
-    include: {
-      assignments: {
-        include: { user: { select: { fullName: true, role: { select: { roleName: true } } } } },
-      },
-    },
-  });
-
-  // accessUrl: Cloudinary URL'i ise zaten tam https://... — olduğu gibi gönder.
-  // Disk modunda relative path (/uploads/...) → PUBLIC_BASE_URL veya localhost ekle.
-  const accessUrl = fileUrl.startsWith('http')
-    ? fileUrl
-    : `${process.env.PUBLIC_BASE_URL ?? `http://localhost:${process.env.PORT || 3000}`}${fileUrl}`;
-
-  return res.status(201).json({
-    message: `Dosya başarıyla yüklendi ve ${userIds.length} kullanıcıya atandı.`,
-    education,
-    accessUrl,
-  });
 }
 
 // GET /api/educations
@@ -210,20 +215,40 @@ export async function markAsViewed(req: AuthRequest, res: Response) {
 
 // DELETE /api/educations/:id
 export async function deleteEducation(req: AuthRequest, res: Response) {
-  const id = parseInt(req.params.id);
-  if (isNaN(id)) return res.status(400).json({ message: 'Geçersiz ID.' });
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ message: 'Geçersiz ID.' });
 
-  const education = await prisma.education.findUnique({ where: { id } });
-  if (!education) return res.status(404).json({ message: 'Kayıt bulunamadı.' });
+    const education = await prisma.education.findUnique({ where: { id } });
+    if (!education) return res.status(404).json({ message: 'Kayıt bulunamadı.' });
 
-  const fs = await import('fs/promises');
-  const path = await import('path');
-  const uploadsDir = process.env.UPLOADS_DIR || path.join(__dirname, '../../uploads');
-  const filePath = path.join(uploadsDir, path.basename(education.fileUrl));
-  try { await fs.unlink(filePath); } catch { /* zaten silinmiş */ }
+    // Cloudinary URL ise Cloudinary'den sil; yoksa local disk'ten dene
+    if (education.fileUrl.startsWith('http')) {
+      try {
+        const { cloudinary, isCloudinaryConfigured } = await import('../services/cloudinary.service');
+        if (isCloudinaryConfigured()) {
+          // public_id: URL'den yol segmentini çıkar (sporthink/education/filename)
+          const urlPath = new URL(education.fileUrl).pathname; // /dybe7hqqb/raw/upload/v.../sporthink/...
+          const match = urlPath.match(/\/(?:raw|image|video)\/upload\/(?:v\d+\/)?(.+)$/);
+          if (match) {
+            await cloudinary.uploader.destroy(match[1], { resource_type: 'raw' }).catch(() => {});
+          }
+        }
+      } catch { /* Cloudinary hatası DB silmeyi engellemesin */ }
+    } else {
+      const fs = await import('fs/promises');
+      const path = await import('path');
+      const uploadsDir = process.env.UPLOADS_DIR || path.join(__dirname, '../../uploads');
+      const filePath = path.join(uploadsDir, path.basename(education.fileUrl));
+      await fs.unlink(filePath).catch(() => {});
+    }
 
-  await prisma.education.delete({ where: { id } });
-  return res.json({ message: 'Eğitim materyali silindi.' });
+    await prisma.education.delete({ where: { id } });
+    return res.json({ message: 'Eğitim materyali silindi.' });
+  } catch (err: any) {
+    console.error('[deleteEducation]', err.message);
+    return res.status(500).json({ message: 'Silme işlemi başarısız: ' + err.message });
+  }
 }
 
 // Multer hata yakalayıcı

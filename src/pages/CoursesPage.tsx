@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect, FormEvent } from 'react';
+import { useState, useMemo, useRef, FormEvent } from 'react';
 import { useApi } from '../hooks/useApi';
 import { useAuth } from '../context/AuthContext';
 import ProgressBar from '../components/ui/ProgressBar';
@@ -7,7 +7,6 @@ import StatCard from '../components/ui/StatCard';
 import api from '../lib/api';
 import CoursePartViewer, { CoursePart } from '../components/CoursePartViewer';
 import QuizModal from '../components/QuizModal';
-import { extractCoverFromFile } from '../lib/extractCover';
 
 // ─── Tipler ───────────────────────────────────────────────────────────────────
 
@@ -96,6 +95,7 @@ export default function CoursesPage() {
   const [showForm, setShowForm]       = useState(false);
   const [starting, setStarting]       = useState<number | null>(null);
   const [completing, setCompleting]   = useState<number | null>(null);
+  const [deletingCourse, setDeletingCourse] = useState<number | null>(null);
   const [viewerCourse, setViewerCourse] = useState<CourseAssignment | null>(null);
   const [quizCourse,   setQuizCourse]   = useState<{ courseId: number; title: string } | null>(null);
   const [viewedEduIds, setViewedEduIds] = useState<Set<number>>(new Set());
@@ -153,6 +153,19 @@ export default function CoursesPage() {
       refetch();
     } catch { /* sessiz */ }
     finally { setCompleting(null); }
+  }
+
+  async function handleDeleteCourse(courseId: number, title: string) {
+    if (!confirm(`"${title}" kursunu sistemden tamamen silmek istediğinize emin misiniz?\n\nBu işlem geri alınamaz.`)) return;
+    setDeletingCourse(courseId);
+    try {
+      await api.delete(`/courses/${courseId}`);
+      adminRefetch();
+    } catch (err: any) {
+      alert(err?.response?.data?.message ?? 'Silme işlemi başarısız oldu.');
+    } finally {
+      setDeletingCourse(null);
+    }
   }
 
   async function handleViewEdu(eduId: number, fileUrl: string) {
@@ -248,6 +261,7 @@ export default function CoursesPage() {
                         <th className="text-center px-4 py-3">Bölüm</th>
                         <th className="text-center px-4 py-3">Süre</th>
                         <th className="text-center px-4 py-3">Atama</th>
+                        <th className="text-center px-4 py-3">İşlem</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -255,6 +269,7 @@ export default function CoursesPage() {
                         const ext = course.contentUrl
                           ? (course.contentUrl.split('.').pop() ?? '').toUpperCase()
                           : '';
+                        const isDeleting = deletingCourse === course.courseId;
                         return (
                           <tr key={course.courseId}
                             className={`border-b border-brand-border/50 ${i % 2 === 0 ? '' : 'bg-brand-lightGray/40'}`}>
@@ -288,6 +303,17 @@ export default function CoursesPage() {
                               }`}>
                                 {course._count.courseAssignments} kişi
                               </span>
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <button
+                                onClick={() => handleDeleteCourse(course.courseId, course.title)}
+                                disabled={isDeleting}
+                                className="inline-flex items-center gap-1 text-xs font-bold text-red-600 border border-red-200 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                {isDeleting ? (
+                                  <span className="w-3 h-3 border-2 border-red-400 border-t-transparent rounded-full animate-spin" />
+                                ) : '🗑'} Sil
+                              </button>
                             </td>
                           </tr>
                         );
@@ -471,10 +497,6 @@ function AssignForm({ categories, isSysAdmin, onSuccess }: {
   });
   const [file, setFile]                   = useState<File | null>(null);
   const fileInputRef                      = useRef<HTMLInputElement>(null);
-  // Otomatik kapak çıkarma state'i — file değişince hemen üretilir
-  const [coverBlob, setCoverBlob]         = useState<Blob | null>(null);
-  const [coverPreviewUrl, setCoverPreviewUrl] = useState<string | null>(null);
-  const [coverStatus, setCoverStatus]     = useState<'idle' | 'extracting' | 'ready' | 'unsupported' | 'error'>('idle');
   const [selectedIds, setSelectedIds]     = useState<Set<number>>(new Set());
   const [mandatoryIds, setMandatoryIds]   = useState<Set<number>>(new Set());
   const [search, setSearch]               = useState('');
@@ -488,44 +510,6 @@ function AssignForm({ categories, isSysAdmin, onSuccess }: {
   ]);
 
   const users = storeUsers ?? [];
-
-  // Dosya seçildiğinde otomatik kapak görseli üret (PDF: ilk sayfa, video: ilk frame)
-  useEffect(() => {
-    let revokedUrl: string | null = null;
-    if (!file) {
-      setCoverBlob(null);
-      setCoverPreviewUrl(prev => { if (prev) URL.revokeObjectURL(prev); return null; });
-      setCoverStatus('idle');
-      return;
-    }
-
-    let cancelled = false;
-    setCoverStatus('extracting');
-    setCoverBlob(null);
-
-    (async () => {
-      const blob = await extractCoverFromFile(file);
-      if (cancelled) {
-        if (blob) blob.size; // no-op
-        return;
-      }
-      if (!blob) {
-        setCoverStatus('unsupported');
-        setCoverPreviewUrl(prev => { if (prev) URL.revokeObjectURL(prev); return null; });
-        return;
-      }
-      const url = URL.createObjectURL(blob);
-      revokedUrl = url;
-      setCoverBlob(blob);
-      setCoverPreviewUrl(prev => { if (prev) URL.revokeObjectURL(prev); return url; });
-      setCoverStatus('ready');
-    })();
-
-    return () => {
-      cancelled = true;
-      if (revokedUrl) URL.revokeObjectURL(revokedUrl);
-    };
-  }, [file]);
 
   // Admin için benzersiz mağaza listesi
   const storeOptions = useMemo(() => {
@@ -614,8 +598,6 @@ function AssignForm({ categories, isSysAdmin, onSuccess }: {
     try {
       const fd = new FormData();
       fd.append('file', file);
-      // Otomatik kapak (PDF ilk sayfa / video ilk frame) — varsa upload'a iliştir
-      if (coverBlob) fd.append('coverImage', coverBlob, 'cover.jpg');
       if (form.title.trim())       fd.append('title',       form.title.trim());
       if (form.description.trim()) fd.append('description', form.description.trim());
       if (form.duration)           fd.append('duration',    form.duration);
@@ -626,9 +608,7 @@ function AssignForm({ categories, isSysAdmin, onSuccess }: {
       fd.append('parts',            JSON.stringify(parts));
       fd.append('totalParts',       String(parts.length));
 
-      const { data } = await api.post('/courses/upload', fd, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
+      const { data } = await api.post('/courses/upload', fd);
       setSuccess(data.message);
       setForm({ title: '', description: '', duration: '', categoryId: '', deadline: '' });
       setFile(null);
@@ -756,57 +736,6 @@ function AssignForm({ categories, isSysAdmin, onSuccess }: {
             )}
           </label>
 
-          {/* Otomatik kapak önizleme + onay */}
-          {file && coverStatus !== 'idle' && (
-            <div className="mt-2.5 flex items-start gap-3 p-3 rounded-xl bg-brand-lightGray border border-brand-border">
-              {coverStatus === 'extracting' && (
-                <>
-                  <div className="w-16 h-20 rounded-md bg-white border border-brand-border flex items-center justify-center shrink-0">
-                    <div className="w-5 h-5 border-2 border-brand-red border-t-transparent rounded-full animate-spin" />
-                  </div>
-                  <div className="flex-1 self-center">
-                    <p className="text-xs font-semibold text-brand-black">Kapak fotoğrafı oluşturuluyor...</p>
-                    <p className="text-[11px] text-brand-gray mt-0.5">Dosyanın ilk karesi alınıyor.</p>
-                  </div>
-                </>
-              )}
-
-              {coverStatus === 'ready' && coverPreviewUrl && (
-                <>
-                  <img
-                    src={coverPreviewUrl}
-                    alt="Otomatik kapak"
-                    className="w-16 h-20 rounded-md object-cover border border-brand-border shrink-0"
-                  />
-                  <div className="flex-1 self-center">
-                    <p className="text-xs font-bold text-green-700 flex items-center gap-1">
-                      ✓ Kapak fotoğrafı otomatik oluşturuldu
-                    </p>
-                    <p className="text-[11px] text-brand-gray mt-0.5">
-                      {file.name.toLowerCase().endsWith('.pdf')
-                        ? 'PDF\'in 1. sayfasından alındı.'
-                        : 'Videonun ilk karesinden alındı.'}
-                      {coverBlob && ` (${(coverBlob.size / 1024).toFixed(0)} KB)`}
-                    </p>
-                  </div>
-                </>
-              )}
-
-              {coverStatus === 'unsupported' && (
-                <>
-                  <div className="w-16 h-20 rounded-md bg-white border border-brand-border flex items-center justify-center text-2xl shrink-0">
-                    ℹ️
-                  </div>
-                  <div className="flex-1 self-center">
-                    <p className="text-xs font-semibold text-brand-black">Kapak otomatik üretilemiyor</p>
-                    <p className="text-[11px] text-brand-gray mt-0.5">
-                      Bu dosya tipinden (örn. PPTX) ilk sayfa çıkarılamaz; eğitim kapaksız kaydedilecek.
-                    </p>
-                  </div>
-                </>
-              )}
-            </div>
-          )}
         </div>
 
         {/* Süre + Son Tarih */}
@@ -1105,8 +1034,11 @@ function CourseCard({ item, onStart, onView, onComplete, onQuiz, starting, compl
   const isDone     = status === 'completed';
 
   const contentUrl  = item.course.contentUrl;
-  const rawExt      = contentUrl ? (contentUrl.split('.').pop() ?? '').toUpperCase() : '';
-  const fileMeta    = FILE_EXT_META[rawExt] ?? null;
+  const cleanUrl    = contentUrl ? contentUrl.split('?')[0].split('#')[0] : '';
+  const rawExt      = cleanUrl ? (cleanUrl.split('.').pop() ?? '').toUpperCase() : '';
+  // Cloudinary raw upload URL'leri uzantısız gelir — PDF olarak kabul et
+  const isCloudinaryRaw = !!contentUrl && contentUrl.includes('/raw/upload/') && !FILE_EXT_META[rawExt];
+  const fileMeta    = FILE_EXT_META[rawExt] ?? (isCloudinaryRaw ? FILE_EXT_META['PDF'] : null);
   const isFileBased = !!fileMeta;
   const isUrlBased  = !!contentUrl && !isFileBased;
   const totalParts  = item.course.totalParts ?? 1;
@@ -1129,7 +1061,7 @@ function CourseCard({ item, onStart, onView, onComplete, onQuiz, starting, compl
         <Badge label={badge.label} variant={badge.variant} />
         {fileMeta && (
           <span className={`inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-md border ${fileMeta.bg} ${fileMeta.txt}`}>
-            {fileMeta.icon} {rawExt}
+            {fileMeta.icon} {isCloudinaryRaw ? 'PDF' : rawExt}
           </span>
         )}
       </div>
@@ -1171,9 +1103,6 @@ function CourseCard({ item, onStart, onView, onComplete, onQuiz, starting, compl
                 }`}>
                 {isDone ? '👁 Tekrar Görüntüle' : status === 'in_progress' ? `▶ Devam Et (${completedCount}/${totalParts})` : '👁 Görüntüle'}
               </button>
-              <a href={contentUrl!} download
-                className="text-xs font-bold text-brand-gray border border-brand-border bg-brand-lightGray hover:bg-gray-200 px-3 py-2 rounded-lg transition-colors"
-                title="İndir">⬇</a>
               {isDone && (
                 <button onClick={onQuiz} title="AI quiz"
                   className="text-xs font-bold text-purple-700 border border-purple-300 bg-purple-50 hover:bg-purple-100 px-3 py-2 rounded-lg transition-colors whitespace-nowrap">

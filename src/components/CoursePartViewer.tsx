@@ -53,9 +53,9 @@ export default function CoursePartViewer({
     return first ? first.partNumber : (partList[0]?.partNumber ?? 1);
   });
 
-  const ext    = contentUrl ? (contentUrl.split('.').pop() ?? '').toLowerCase() : '';
-  const isPdf  = ext === 'pdf';
-  const isPptx = ext === 'pptx' || ext === 'ppt';
+  const cleanExt = contentUrl ? (contentUrl.split('?')[0].split('#')[0].split('.').pop() ?? '').toLowerCase() : '';
+  const isPdf  = cleanExt === 'pdf' || (!!contentUrl && contentUrl.includes('/raw/upload/') && cleanExt !== 'pptx' && cleanExt !== 'ppt');
+  const isPptx = cleanExt === 'pptx' || cleanExt === 'ppt';
 
   // ESC ile kapat
   useEffect(() => {

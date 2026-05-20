@@ -122,6 +122,12 @@ interface QuizQuestion {
 
 // ─── PDF → metin ──────────────────────────────────────────────────────────────
 async function extractText(contentUrl: string): Promise<string> {
+  // Cloudinary veya herhangi bir uzak URL → bellekte indir, parse et
+  if (contentUrl.startsWith('http://') || contentUrl.startsWith('https://')) {
+    return fetchAndExtract(contentUrl);
+  }
+
+  // Yerel disk (geliştirme / disk-storage modu)
   const filename = path.basename(contentUrl);
   const filePath = path.join(UPLOADS_DIR, filename);
   const ext      = path.extname(filename).toLowerCase();
@@ -129,7 +135,7 @@ async function extractText(contentUrl: string): Promise<string> {
   if (!fs.existsSync(filePath)) throw new Error(`Dosya bulunamadı: ${filename}`);
 
   if (ext === '.pdf') {
-    const buffer  = fs.readFileSync(filePath);
+    const buffer   = fs.readFileSync(filePath);
     const { text } = await pdfParse(buffer);
     const trimmed  = text.trim();
     if (trimmed.length < 50) throw new Error('PDF okunabilir metin içermiyor.');
@@ -141,6 +147,35 @@ async function extractText(contentUrl: string): Promise<string> {
   return (
     `Eğitim başlığı: "${path.basename(filename, ext).replace(/_/g, ' ')}"\n` +
     `Boyut: ${(stat.size / 1024).toFixed(0)} KB — Sunum dosyası`
+  );
+}
+
+// ─── Uzak dosyayı indir, PDF ise parse et ────────────────────────────────────
+async function fetchAndExtract(url: string): Promise<string> {
+  console.log(`[Quiz] Uzak dosya indiriliyor: ${url.slice(0, 80)}...`);
+
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Dosya indirilemedi: HTTP ${res.status}`);
+
+  const buffer = Buffer.from(await res.arrayBuffer());
+
+  // PDF magic byte: ilk 4 byte "%PDF" ise PDF'tir
+  const isPdf = buffer.length > 4 && buffer.slice(0, 4).toString('ascii') === '%PDF';
+
+  if (isPdf) {
+    const { text } = await pdfParse(buffer);
+    const trimmed  = text.trim();
+    if (trimmed.length < 50) throw new Error('PDF okunabilir metin içermiyor.');
+    console.log(`[Quiz] Uzak PDF → ${trimmed.length} karakter`);
+    return trimmed.slice(0, MAX_CHARS);
+  }
+
+  // PDF değil (PPTX vb.) — kurs başlığından içerik üret
+  const basename = path.basename(url.split('?')[0]).replace(/_/g, ' ');
+  console.log(`[Quiz] Uzak dosya PDF değil → başlık bazlı içerik`);
+  return (
+    `Eğitim başlığı: "${basename}"\n` +
+    `Boyut: ${(buffer.length / 1024).toFixed(0)} KB — Sunum dosyası`
   );
 }
 
