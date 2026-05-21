@@ -53,6 +53,12 @@ function is429(err: any): boolean {
   return s === 429 || msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED') || msg.includes('quota');
 }
 
+function isFatal(err: any): boolean {
+  const msg = String(err?.message ?? '');
+  const s   = err?.status ?? err?.httpStatus ?? 0;
+  return s === 403 || s === 401 || msg.includes('API_KEY_INVALID') || msg.includes('PERMISSION_DENIED');
+}
+
 function sleep(ms: number) {
   return new Promise<void>(resolve => setTimeout(resolve, ms));
 }
@@ -91,18 +97,21 @@ async function runJob(jobId: string, docText: string, courseTitle: string, cours
     } catch (err: any) {
       job.attempts++;
 
-      if (is429(err)) {
+      if (isFatal(err)) {
+        job.status = 'error';
+        job.error  = 'AI servisi kimlik doğrulama hatası. Lütfen sistem yöneticisiyle iletişime geçin. (API key geçersiz)';
+        courseJobMap.delete(courseId);
+        console.error(`[Job ${jobId.slice(-6)}] ❌ Fatal hata → job iptal: ${err.message}`);
+        setTimeout(() => jobs.delete(jobId), 30 * 60 * 1000);
+        return;
+      } else if (is429(err)) {
         const waitSec = 65;
         console.log(`[Job ${jobId.slice(-6)}] 429 kota aşıldı → ${waitSec}s bekleniyor (deneme ${job.attempts}/${MAX_ATTEMPTS})`);
-        if (job.attempts < MAX_ATTEMPTS) {
-          await sleep(waitSec * 1000);
-        }
+        if (job.attempts < MAX_ATTEMPTS) await sleep(waitSec * 1000);
       } else {
         const waitSec = 15;
         console.error(`[Job ${jobId.slice(-6)}] Hata: ${err.message} → ${waitSec}s bekleniyor`);
-        if (job.attempts < MAX_ATTEMPTS) {
-          await sleep(waitSec * 1000);
-        }
+        if (job.attempts < MAX_ATTEMPTS) await sleep(waitSec * 1000);
       }
     }
   }
@@ -157,10 +166,17 @@ async function extractText(contentUrl: string): Promise<string> {
 async function fetchAndExtract(url: string): Promise<string> {
   console.log(`[Quiz] Uzak dosya indiriliyor: ${url.slice(0, 80)}...`);
 
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Dosya indirilemedi: HTTP ${res.status}`);
+  const controller = new AbortController();
+  const timeout    = setTimeout(() => controller.abort(), 60_000); // 60sn timeout
+  let fetchRes: Awaited<ReturnType<typeof fetch>>;
+  try {
+    fetchRes = await fetch(url, { signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+  if (!fetchRes.ok) throw new Error(`Dosya indirilemedi: HTTP ${fetchRes.status}`);
 
-  const buffer = Buffer.from(await res.arrayBuffer());
+  const buffer = Buffer.from(await fetchRes.arrayBuffer());
 
   // PDF magic byte: ilk 4 byte "%PDF" ise PDF'tir
   const isPdf = buffer.length > 4 && buffer.slice(0, 4).toString('ascii') === '%PDF';
@@ -325,6 +341,10 @@ router.get('/job/:jobId', async (req: AuthRequest, res: Response) => {
 // ─── POST /api/quiz/course/:courseId/generate — async ────────────────────────
 router.post('/course/:courseId/generate', async (req: AuthRequest, res: Response) => {
   try {
+    if (!API_KEY) {
+      return res.status(503).json({ message: 'Quiz servisi şu an aktif değil. (GEMINI_API_KEY yapılandırılmamış)' });
+    }
+
     const courseId = parseInt(req.params.courseId);
     const userId   = req.user!.userId;
     if (isNaN(courseId)) return res.status(400).json({ message: 'Geçersiz kurs ID.' });
