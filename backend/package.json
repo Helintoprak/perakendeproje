@@ -33,8 +33,11 @@
     "multer-storage-cloudinary": "^4.0.0",
     "openai": "^6.34.0",
     "pdf-parse": "^1.1.4",
+    "prisma": "^5.11.0",
     "stream-chat": "^9.43.2",
     "stream-chat-react": "^14.2.0",
+    "typescript": "^5.4.5",
+    "xlsx": "^0.18.5",
     "zod": "^3.22.4"
   },
   "devDependencies": {
@@ -45,9 +48,6 @@
     "@types/multer": "^2.1.0",
     "@types/node": "^20.12.7",
     "@types/pdf-parse": "^1.1.5",
-    "prisma": "^5.11.0",
-    "ts-node-dev": "^2.0.0",
-    "typescript": "^5.4.5",
-    "xlsx": "^0.18.5"
+    "ts-node-dev": "^2.0.0"
   }
 }
