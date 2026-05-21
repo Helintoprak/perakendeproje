@@ -1,6 +1,6 @@
 import { Router, Response }  from 'express';
 import { PrismaClient }       from '@prisma/client';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import Anthropic               from '@anthropic-ai/sdk';
 import { authenticate, requireRole, AuthRequest } from '../middleware/auth.middleware';
 import path from 'path';
 import fs   from 'fs';
@@ -10,24 +10,24 @@ import fs   from 'fs';
 const pdfParse: (buf: Buffer) => Promise<{ text: string }> = require('pdf-parse/lib/pdf-parse.js');
 
 // ─── Yapılandırma ─────────────────────────────────────────────────────────────
-const MODEL       = 'gemini-2.0-flash';
+const MODEL       = 'claude-haiku-4-5-20251001';
 const PASS_SCORE  = 7;
 const MAX_CHARS   = 20_000;
 const UPLOADS_DIR = process.env.UPLOADS_DIR || path.join(__dirname, '../../uploads');
 
-const API_KEY = (process.env.GEMINI_API_KEY ?? '').trim();
+const API_KEY = (process.env.ANTHROPIC_API_KEY ?? '').trim();
 
 if (!API_KEY) {
   console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  console.error('❌  GEMINI_API_KEY .env dosyasında tanımlı değil!');
-  console.error('    https://aistudio.google.com → "Get API key"');
+  console.error('❌  ANTHROPIC_API_KEY .env dosyasında tanımlı değil!');
+  console.error('    https://console.anthropic.com → "API Keys"');
   console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 } else {
-  console.log(`[Quiz] Gemini → model: ${MODEL} | key: ${API_KEY.slice(0, 8)}...`);
+  console.log(`[Quiz] Anthropic Claude → model: ${MODEL} | key: ${API_KEY.slice(0, 8)}...`);
 }
 
-const genAI  = new GoogleGenerativeAI(API_KEY);
-const router = Router();
+const anthropic = new Anthropic({ apiKey: API_KEY });
+const router    = Router();
 const prisma = new PrismaClient();
 
 // ─── Arka Plan Job Sistemi ────────────────────────────────────────────────────
@@ -50,7 +50,7 @@ const courseJobMap = new Map<number, string>();
 function is429(err: any): boolean {
   const msg = String(err?.message ?? '');
   const s   = err?.status ?? err?.httpStatus ?? 0;
-  return s === 429 || msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED') || msg.includes('quota');
+  return s === 429 || msg.includes('429') || msg.includes('rate_limit') || msg.includes('overloaded');
 }
 
 function isFatal(err: any): boolean {
@@ -58,8 +58,8 @@ function isFatal(err: any): boolean {
   const s   = err?.status ?? err?.httpStatus ?? 0;
   return (
     s === 403 || s === 401 || s === 404 ||
-    msg.includes('API_KEY_INVALID') || msg.includes('PERMISSION_DENIED') ||
-    msg.includes('404') || msg.includes('MODEL_NOT_FOUND') || msg.includes('is not found')
+    msg.includes('authentication_error') || msg.includes('permission_error') ||
+    msg.includes('invalid_api_key') || msg.includes('not_found')
   );
 }
 
@@ -212,9 +212,8 @@ async function fetchAndExtract(url: string): Promise<string> {
   );
 }
 
-// ─── Gemini çağrısı ───────────────────────────────────────────────────────────
+// ─── Anthropic Claude çağrısı ─────────────────────────────────────────────────
 async function generateWithGemini(docText: string, courseTitle: string): Promise<QuizQuestion[]> {
-  const model  = genAI.getGenerativeModel({ model: MODEL });
   const prompt =
     `Aşağıdaki eğitim metnine dayalı olarak 10 adet Türkçe, 4 şıklı çoktan seçmeli soru hazırla.\n` +
     `Kurs adı: "${courseTitle}"\n\n` +
@@ -222,31 +221,29 @@ async function generateWithGemini(docText: string, courseTitle: string): Promise
     `{"questions":[{"question":"...","options":["A","B","C","D"],"correctIndex":0}]}\n\n` +
     `Metin:\n${docText}`;
 
-  console.log(`[Quiz] Gemini isteği → ${docText.length} karakter`);
+  console.log(`[Quiz] Anthropic isteği → ${docText.length} karakter`);
 
   let rawText: string;
   try {
-    const result = await model.generateContent(prompt);
-    rawText = result.response.text();
+    const response = await anthropic.messages.create({
+      model:      MODEL,
+      max_tokens: 2048,
+      messages:   [{ role: 'user', content: prompt }],
+    });
+    const block = response.content[0];
+    rawText = block.type === 'text' ? block.text : '';
   } catch (err: any) {
     const msg = String(err?.message ?? '');
     const s   = err?.status ?? err?.httpStatus ?? 0;
 
     console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    if (s === 404 || msg.includes('404') || msg.includes('MODEL_NOT_FOUND')) {
-      console.error(`❌ GEMINI 404 — Model bulunamadı: "${MODEL}"`);
-      console.error('   → Geçerli model adını kontrol edin.');
-    } else if (is429(err)) {
-      console.error(`⏳ GEMINI 429 — İstek limiti / kota aşıldı`);
-      console.error(`   model  : ${MODEL}`);
-      console.error(`   key    : ${API_KEY.slice(0, 12)}...`);
-      console.error(`   mesaj  : ${msg}`);
-      console.error('   → https://aistudio.google.com adresinden kota durumunu kontrol edin.');
-    } else if (s === 403 || msg.includes('API_KEY_INVALID')) {
-      console.error(`❌ GEMINI 403 — API anahtarı geçersiz`);
-      console.error(`   key : ${API_KEY.slice(0, 12)}...`);
+    if (is429(err)) {
+      console.error(`⏳ ANTHROPIC 429 — İstek limiti / kota aşıldı`);
+      console.error(`   model  : ${MODEL} | mesaj: ${msg}`);
+    } else if (isFatal(err)) {
+      console.error(`❌ ANTHROPIC (HTTP ${s}) — ${msg}`);
     } else {
-      console.error(`❌ GEMINI (HTTP ${s}) — ${msg}`);
+      console.error(`❌ ANTHROPIC (HTTP ${s}) — ${msg}`);
     }
     console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     throw err;
