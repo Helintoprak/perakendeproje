@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { authenticate, AuthRequest } from '../middleware/auth.middleware';
-import { upload, fileUrlFromUpload } from '../middleware/upload.middleware';
+import { upload, uploadFileToCloud } from '../middleware/upload.middleware';
 import { handleUploadError } from '../controllers/education.controller';
 import path from 'path';
 
@@ -67,7 +67,7 @@ router.post(
       return res.status(400).json({ message: 'Başlık zorunludur.' });
     }
 
-    const fileUrl  = fileUrlFromUpload(req.file);
+    const fileUrl  = await uploadFileToCloud(req.file);
     const ext      = path.extname(req.file.originalname).toLowerCase().replace('.', '');
     const fileType = req.file.mimetype.startsWith('video/') ? 'video' : (ext || 'pdf');
 

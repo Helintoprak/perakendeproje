@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { authenticate, requireRole, AuthRequest } from '../middleware/auth.middleware';
-import { upload, fileUrlFromUpload } from '../middleware/upload.middleware';
+import { upload, uploadFileToCloud } from '../middleware/upload.middleware';
 import { handleUploadError } from '../controllers/education.controller';
 
 const router = Router();
@@ -224,7 +224,7 @@ router.post(
       }
 
       const mandatorySet = new Set(rawMandatoryIds.map(Number));
-      const fileUrl = fileUrlFromUpload(contentFile);
+      const fileUrl = await uploadFileToCloud(contentFile);
 
       const course = await prisma.$transaction(async (tx) => {
         const c = await tx.course.create({

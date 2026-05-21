@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { MulterError } from 'multer';
 import { AuthRequest } from '../middleware/auth.middleware';
-import { fileUrlFromUpload } from '../middleware/upload.middleware';
+import { uploadFileToCloud } from '../middleware/upload.middleware';
 
 const prisma = new PrismaClient();
 
@@ -64,8 +64,7 @@ export async function uploadEducation(req: AuthRequest, res: Response) {
     const mandatorySet = new Set(mandatoryIds);
 
     const { originalname } = req.file;
-    // Cloudinary modunda tam HTTPS URL, disk modunda /uploads/<filename> döner
-    const fileUrl = fileUrlFromUpload(req.file);
+    const fileUrl = await uploadFileToCloud(req.file);
 
     const education = await prisma.education.create({
       data: {
