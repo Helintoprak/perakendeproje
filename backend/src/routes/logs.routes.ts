@@ -12,7 +12,7 @@ router.use(authenticate);
 
 router.get('/', async (req: AuthRequest, res) => {
   try {
-    if (req.user?.role !== 'Admin') {
+    if (req.user?.roleName !== 'Admin') {
       return res.status(403).json({ message: 'Yetkisiz erişim.' });
     }
 
