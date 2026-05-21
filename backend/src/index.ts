@@ -14,6 +14,7 @@ import communityRoutes from './routes/community.routes';
 import teamRoutes      from './routes/shift.routes';
 import quizRoutes      from './routes/quiz.routes';
 import chatRoutes      from './routes/chat.routes';
+import logsRoutes      from './routes/logs.routes';
 
 dotenv.config();
 
@@ -83,6 +84,7 @@ app.use('/api/community', communityRoutes);
 app.use('/api/quiz',      quizRoutes);
 app.use('/api/team',      teamRoutes);
 app.use('/api/chat',      chatRoutes);
+app.use('/api/logs',      logsRoutes);
 
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', app: 'Sporthink API', version: '1.0.0' });

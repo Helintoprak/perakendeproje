@@ -151,6 +151,7 @@ export default function Sidebar({ open, onClose }: Props) {
               {[
                 { path: '/admin', label: 'Merkezi Yönetim', icon: '🏢' },
                 { path: '/team',  label: 'Ekip Yönetimi',   icon: '👥' },
+                { path: '/logs',  label: 'Sistem Logları',   icon: '📋' },
               ].map(item => {
                 const active = location.pathname.startsWith(item.path);
                 return (
