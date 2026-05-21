@@ -1,7 +1,8 @@
-import { Router } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { PrismaClient } from '@prisma/client';
 import { authenticate, AuthRequest } from '../middleware/auth.middleware';
 import { upload, fileUrlFromUpload } from '../middleware/upload.middleware';
+import { handleUploadError } from '../controllers/education.controller';
 import path from 'path';
 
 const router = Router();
@@ -42,7 +43,15 @@ router.get('/', async (req: AuthRequest, res) => {
 });
 
 // ─── POST /api/library — dosya yükle ────────────────────────────────────────
-router.post('/', upload.single('file'), async (req: AuthRequest, res) => {
+router.post(
+  '/',
+  (req: Request, res: Response, next: NextFunction) => {
+    upload.single('file')(req, res, (err) => {
+      if (err) return handleUploadError(err, req, res, next);
+      next();
+    });
+  },
+  async (req: AuthRequest, res: Response) => {
   try {
     const role = req.user?.roleName;
     if (role !== 'Admin' && role !== 'Müdür' && role !== 'Bölge Müdürü') {

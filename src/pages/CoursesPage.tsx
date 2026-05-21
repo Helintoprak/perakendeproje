@@ -1052,7 +1052,7 @@ function AssignForm({ categories, isSysAdmin, onSuccess }: {
         <div className="flex gap-3 pt-1">
           <button
             type="submit"
-            disabled={saving || !file}
+            disabled={saving || !selectedLibItem}
             className="bg-brand-red hover:bg-brand-redDark text-white font-bold px-6 py-2.5 rounded-xl
               transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
