@@ -10,7 +10,7 @@ import fs   from 'fs';
 const pdfParse: (buf: Buffer) => Promise<{ text: string }> = require('pdf-parse/lib/pdf-parse.js');
 
 // ─── Yapılandırma ─────────────────────────────────────────────────────────────
-const MODEL       = 'gemini-2.0-flash-exp';
+const MODEL       = 'gemini-1.5-flash';
 const PASS_SCORE  = 7;
 const MAX_CHARS   = 20_000;
 const UPLOADS_DIR = process.env.UPLOADS_DIR || path.join(__dirname, '../../uploads');
