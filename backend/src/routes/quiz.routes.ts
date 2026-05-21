@@ -10,7 +10,7 @@ import fs   from 'fs';
 const pdfParse: (buf: Buffer) => Promise<{ text: string }> = require('pdf-parse/lib/pdf-parse.js');
 
 // ─── Yapılandırma ─────────────────────────────────────────────────────────────
-const MODEL       = 'claude-haiku-4-5-20251001';
+const MODEL       = 'claude-3-5-haiku-20241022';
 const PASS_SCORE  = 7;
 const MAX_CHARS   = 20_000;
 const UPLOADS_DIR = process.env.UPLOADS_DIR || path.join(__dirname, '../../uploads');
@@ -23,10 +23,10 @@ if (!API_KEY) {
   console.error('    https://console.anthropic.com → "API Keys"');
   console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 } else {
-  console.log(`[Quiz] Anthropic Claude → model: ${MODEL} | key: ${API_KEY.slice(0, 8)}...`);
+  console.log(`[Quiz] Anthropic Claude → model: ${MODEL} | key: ${API_KEY.slice(0, 12)}...`);
 }
 
-const anthropic = new Anthropic({ apiKey: API_KEY });
+const anthropic = new Anthropic({ apiKey: API_KEY || 'missing' });
 const router    = Router();
 const prisma = new PrismaClient();
 
