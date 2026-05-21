@@ -231,22 +231,18 @@ export default function PerformancePage() {
                 );
               })}
             </div>
-            <h2 className="text-base font-bold text-brand-black mt-2">Aylık Trend Grafikleri</h2>
+            <div className="flex items-center mt-2">
+              <h2 className="text-base font-bold text-brand-black">Trend Grafikleri</h2>
+            </div>
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-              {kpiCards.map(({ kpi }) => {
+              {kpiCards.filter(({ kpi }) => kpi.kpiId !== 2).map(({ kpi }) => {
                 const cfg = KPI_CONFIG[kpi.kpiId] ?? { icon: '📊', color: '#D42B2B' };
-                const trendData = trends[kpi.kpiId] ?? [];
+                const allTrendData = trends[kpi.kpiId] ?? [];
                 const goal = goals.find(g => g.kpiId === kpi.kpiId);
-                return <TrendCard key={kpi.kpiId} title={kpi.kpiName} icon={cfg.icon} unit={kpi.unit ?? ''} color={cfg.color} data={trendData.map(d => ({ ...d, target: goal ? parseFloat(goal.targetValue) : undefined }))} />;
+                const yearlyData = yearlyPerf?.yearly[kpi.kpiId] ?? [];
+                return <TrendCard key={kpi.kpiId} title={kpi.kpiName} icon={cfg.icon} unit={kpi.unit ?? ''} color={cfg.color} allData={allTrendData.map(d => ({ ...d, target: goal ? parseFloat(goal.targetValue) : undefined }))} yearlyData={yearlyData} />;
               })}
             </div>
-            {yearlyPerf && visibleKpiDefs.length > 0 && (
-              <YearlyComparisonSection
-                yearlyPerf={yearlyPerf}
-                kpiDefs={kpiDefs ?? []}
-                visibleKpiIds={visibleKpiDefs.map(k => k.kpiId)}
-              />
-            )}
           </>
         )
       )}
@@ -343,48 +339,75 @@ function KpiCard({ icon, name, unit, target, actual, rate, color, format, storeA
 
 // ─── Trend Grafik Kartı ───────────────────────────────────────────────────────
 
-function TrendCard({ title, icon, unit, color, data }: {
+function TrendCard({ title, icon, unit, color, allData, yearlyData = [] }: {
   title: string; icon: string; unit: string;
-  color: string; data: { month: string; actual: number; target?: number; storeName?: string | null }[];
+  color: string;
+  allData: { month: string; actual: number; target?: number; storeName?: string | null }[];
+  yearlyData?: { month: string; personal: number; storeAvg: number }[];
 }) {
+  const [range, setRange] = useState<3 | 6 | 12>(6);
+  const data = allData.slice(-range);
+  const yearly = yearlyData.slice(-range);
+
   const last = data[data.length - 1];
   const prev = data[data.length - 2];
   const diff = last && prev && prev.actual > 0
     ? Math.round(((last.actual - prev.actual) / prev.actual) * 100)
     : 0;
 
-  // Verisi olan aylar için ay → mağaza eşlemesi (rotasyon görünürlüğü)
+  const hasStoreAvg = yearly.some(d => d.storeAvg > 0);
+  const comparisonData = data.map(d => {
+    const y = yearly.find(y => y.month === d.month);
+    return { month: d.month, personal: d.actual, storeAvg: y?.storeAvg ?? 0 };
+  });
+
   const monthsWithStore = data.filter(d => d.actual > 0 && d.storeName);
   const uniqueStores = new Set(monthsWithStore.map(d => d.storeName));
-  const showRotationList = uniqueStores.size > 1; // Sadece mağaza değişikliği varsa göster
+  const showRotationList = uniqueStores.size > 1;
 
   return (
     <div className="bg-white rounded-2xl border border-brand-border shadow-card p-5">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <span className="text-xl">{icon}</span>
-          <div>
-            <h3 className="font-bold text-sm text-brand-black">{title}</h3>
-            <p className="text-xs text-brand-gray">Son 6 ay</p>
-          </div>
+          <h3 className="font-bold text-sm text-brand-black">{title}</h3>
         </div>
-        {last && (
-          <div className="text-right">
-            <p className="text-sm font-extrabold text-brand-black">
-              {last.actual > 0 ? last.actual.toLocaleString('tr-TR') : '—'}
-              {unit && <span className="text-xs font-normal text-brand-gray ml-1">{unit}</span>}
-            </p>
-            {diff !== 0 && (
-              <p className={`text-xs font-semibold ${diff >= 0 ? 'text-green-600' : 'text-brand-red'}`}>
-                {diff >= 0 ? '↑' : '↓'} %{Math.abs(diff)} önceki aya göre
+        <div className="flex items-center gap-3">
+          {last && (
+            <div className="text-right">
+              <p className="text-sm font-extrabold text-brand-black">
+                {last.actual > 0 ? last.actual.toLocaleString('tr-TR') : '—'}
+                {unit && <span className="text-xs font-normal text-brand-gray ml-1">{unit}</span>}
               </p>
-            )}
-          </div>
-        )}
+              {diff !== 0 && (
+                <p className={`text-xs font-semibold ${diff >= 0 ? 'text-green-600' : 'text-brand-red'}`}>
+                  {diff >= 0 ? '↑' : '↓'} %{Math.abs(diff)} önceki aya göre
+                </p>
+              )}
+            </div>
+          )}
+          <RangeSelector value={range} onChange={setRange} />
+        </div>
       </div>
-      <KPIChart data={data} type="area" unit={unit} color={color} height={180} showTarget={data.some(d => d.target != null)} />
 
-      {/* Personel rotasyonu: ay → mağaza eşleşmesi */}
+      {hasStoreAvg ? (
+        <>
+          <div className="flex items-center gap-5 mb-3 px-1">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-0.5 bg-brand-red rounded-full" />
+              <span className="text-xs font-semibold text-brand-black">Benim Verim</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-8 border-t-2 border-dashed border-brand-gray" />
+              <span className="text-xs text-brand-gray">Mağaza Ortalaması</span>
+            </div>
+          </div>
+          <ComparisonChart data={comparisonData} unit={unit} height={180} />
+        </>
+      ) : (
+        <KPIChart data={data} type="area" unit={unit} color={color} height={180} showTarget={data.some(d => d.target != null)} />
+      )}
+
       {showRotationList && (
         <div className="mt-4 pt-3 border-t border-brand-border/50">
           <p className="text-[11px] font-semibold uppercase tracking-wider text-brand-gray mb-2">
@@ -607,61 +630,29 @@ function StoreView({ data, month, kpiDefs }: { data: StorePerf | null; month: nu
   );
 }
 
-// ─── 12 Aylık Karşılaştırma Grafiği (Personel vs Mağaza Ortalaması) ──────────
+// ─── Zaman Aralığı Seçici ────────────────────────────────────────────────────
 
-function YearlyComparisonSection({ yearlyPerf, kpiDefs, visibleKpiIds }: {
-  yearlyPerf: YearlyPerf; kpiDefs: KpiDef[]; visibleKpiIds: number[];
-}) {
-  const [selectedKpiId, setSelectedKpiId] = useState<number | null>(null);
-  const effectiveId = selectedKpiId ?? visibleKpiIds[0] ?? null;
-  if (!effectiveId) return null;
-
-  const kpi     = kpiDefs.find(k => k.kpiId === effectiveId);
-  const kpiData = (yearlyPerf.yearly[effectiveId] ?? []).map(d => ({
-    month: d.month, personal: d.personal, storeAvg: d.storeAvg,
-  }));
-
+function RangeSelector({ value, onChange }: { value: 3 | 6 | 12; onChange: (v: 3 | 6 | 12) => void }) {
+  const options: { label: string; v: 3 | 6 | 12 }[] = [
+    { label: 'Son 3 Ay', v: 3 },
+    { label: 'Son 6 Ay', v: 6 },
+    { label: 'Son 1 Yıl', v: 12 },
+  ];
   return (
-    <div className="bg-white rounded-2xl border border-brand-border shadow-card p-5">
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-4">
-        <div>
-          <h3 className="font-bold text-brand-black">📈 12 Aylık Gelişim Karşılaştırması</h3>
-          <p className="text-xs text-brand-gray mt-0.5">Bireysel performansınız ve mağaza personel ortalaması</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {visibleKpiIds.map(id => {
-            const k = kpiDefs.find(k => k.kpiId === id);
-            if (!k) return null;
-            const c = KPI_CONFIG[id];
-            return (
-              <button
-                key={id}
-                onClick={() => setSelectedKpiId(id)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all border ${
-                  id === effectiveId
-                    ? 'border-brand-red bg-brand-red text-white shadow-sm'
-                    : 'border-brand-border bg-brand-lightGray text-brand-gray hover:bg-white hover:border-brand-red/30'
-                }`}
-              >
-                <span>{c?.icon ?? '📊'}</span> {k.kpiName}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="flex items-center gap-5 mb-3 px-1">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-0.5 bg-brand-red rounded-full" />
-          <span className="text-xs font-semibold text-brand-black">Benim Verim</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="w-8 border-t-2 border-dashed border-brand-gray" />
-          <span className="text-xs text-brand-gray">Mağaza Ortalaması</span>
-        </div>
-      </div>
-
-      <ComparisonChart data={kpiData} unit={kpi?.unit ?? undefined} height={260} />
+    <div className="flex gap-1 bg-brand-lightGray rounded-xl p-1 border border-brand-border">
+      {options.map(({ label, v }) => (
+        <button
+          key={v}
+          onClick={() => onChange(v)}
+          className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+            value === v
+              ? 'bg-white text-brand-red shadow-sm border border-brand-border'
+              : 'text-brand-gray hover:text-brand-black'
+          }`}
+        >
+          {label}
+        </button>
+      ))}
     </div>
   );
 }

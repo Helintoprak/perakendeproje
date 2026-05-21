@@ -45,9 +45,9 @@ router.get('/my', async (req: AuthRequest, res) => {
     return d.getMonth() + 1 === month && d.getFullYear() === year;
   });
 
-  // 6 aylık trend: her KPI için ay bazlı toplam (mağaza adıyla birlikte)
-  const trendMonths = Array.from({ length: 6 }, (_, i) => {
-    const d = new Date(year, month - 6 + i, 1);
+  // 12 aylık trend: her KPI için ay bazlı toplam (mağaza adıyla birlikte)
+  const trendMonths = Array.from({ length: 12 }, (_, i) => {
+    const d = new Date(year, month - 12 + i, 1);
     return { label: d.toLocaleString('tr-TR', { month: 'short' }), month: d.getMonth() + 1, year: d.getFullYear() };
   });
 
@@ -377,16 +377,48 @@ router.get('/admin', async (req: AuthRequest, res) => {
 
     // Zincir geneli KPI özeti
     const chainSummary = kpis.map(kpi => {
-      const totalTarget = allGoals.filter(g => g.kpiId === kpi.kpiId).reduce((s, g) => s + Number(g.targetValue), 0);
+      // Oran/ortalama KPI'ları: % birimli (MDO) ve UPT — mağaza bazında ortalanır
+      const isRateKpi = kpi.unit === '%' || kpi.kpiName.toUpperCase().includes('UPT');
+
       const relevantActuals = allActuals.filter(a => a.kpiId === kpi.kpiId);
+      const relevantGoals   = allGoals.filter(g => g.kpiId === kpi.kpiId);
+
       let totalActual: number;
-      if (kpi.kpiId === 4) {
-        totalActual = relevantActuals.length > 0
-          ? relevantActuals.reduce((s, a) => s + Number(a.actualValue), 0) / relevantActuals.length
+      let totalTarget: number;
+
+      if (isRateKpi) {
+        // Her mağazanın aktüellerini ortalaması → mağaza ortalamalarının ortalaması
+        const storeActualMap = new Map<number, number[]>();
+        for (const a of relevantActuals) {
+          const sid = a.storeId ?? 0;
+          if (!storeActualMap.has(sid)) storeActualMap.set(sid, []);
+          storeActualMap.get(sid)!.push(Number(a.actualValue));
+        }
+        const storeMeans = [...storeActualMap.values()].map(
+          vals => vals.reduce((s, v) => s + v, 0) / vals.length
+        );
+        totalActual = storeMeans.length > 0
+          ? storeMeans.reduce((s, v) => s + v, 0) / storeMeans.length
+          : 0;
+
+        // Hedef de mağaza bazında ortalaması alınır
+        const storeGoalMap = new Map<number, number[]>();
+        for (const g of relevantGoals) {
+          const sid = g.storeId ?? 0;
+          if (!storeGoalMap.has(sid)) storeGoalMap.set(sid, []);
+          storeGoalMap.get(sid)!.push(Number(g.targetValue));
+        }
+        const goalMeans = [...storeGoalMap.values()].map(
+          vals => vals.reduce((s, v) => s + v, 0) / vals.length
+        );
+        totalTarget = goalMeans.length > 0
+          ? goalMeans.reduce((s, v) => s + v, 0) / goalMeans.length
           : 0;
       } else {
+        totalTarget = relevantGoals.reduce((s, g) => s + Number(g.targetValue), 0);
         totalActual = relevantActuals.reduce((s, a) => s + Number(a.actualValue), 0);
       }
+
       const rate = totalTarget > 0 ? Math.min((totalActual / totalTarget) * 100, 999) : 0;
       return { kpi, totalTarget, totalActual, rate };
     });

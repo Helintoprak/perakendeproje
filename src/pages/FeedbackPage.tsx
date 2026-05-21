@@ -151,26 +151,29 @@ export default function FeedbackPage() {
   const [file, setFile]                   = useState<{ name: string; url: string } | null>(null);
   const [selectedUser, setSelectedUser]   = useState<StoreUser | null>(null);
   const [personnelSearch, setPersonnelSearch] = useState('');
+  const [storeFilter, setStoreFilter]     = useState<string>('');
 
   const users = storeUsers || [];
   const cats  = categories || [];
 
-  // Rol bazlı arama:
-  //   Admin   → isim + mağaza adı (geniş arama, tüm zinciri görüyor)
-  //   Müdür   → sadece isim (kendi mağazasındaki personel için yeterli)
-  const searchPlaceholder = isAdmin ? 'Personel veya mağaza ara...' : 'Personel ara...';
+  // Admin için benzersiz mağaza listesi
+  const storeOptions = useMemo(() => {
+    if (!isAdmin) return [];
+    const map = new Map<string, string>();
+    users.forEach(u => { if (u.store?.storeName) map.set(u.store.storeName, u.store.storeName); });
+    return [...map.keys()].sort((a, b) => a.localeCompare(b, 'tr'));
+  }, [users, isAdmin]);
 
-  // Anlık arama — backend'e tekrar gitmez (useMemo ile cache).
+  const searchPlaceholder = isAdmin ? 'Personel ara...' : 'Personel ara...';
+
   const filteredUsers = useMemo(() => {
     const q = personnelSearch.trim().toLocaleLowerCase('tr');
-    if (!q) return users;
     return users.filter(u => {
-      if (u.fullName.toLocaleLowerCase('tr').includes(q)) return true;
-      // Mağaza adı sadece Admin için aranır
-      if (isAdmin && (u.store?.storeName ?? '').toLocaleLowerCase('tr').includes(q)) return true;
-      return false;
+      if (isAdmin && storeFilter && u.store?.storeName !== storeFilter) return false;
+      if (q && !u.fullName.toLocaleLowerCase('tr').includes(q)) return false;
+      return true;
     });
-  }, [users, personnelSearch, isAdmin]);
+  }, [users, personnelSearch, storeFilter, isAdmin]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files?.[0]) return;
@@ -269,6 +272,19 @@ export default function FeedbackPage() {
                     </span>
                   </div>
                   <p className="text-[10px] text-brand-gray mt-0.5">Geri bildirim göndermek için bir personel seçin</p>
+                  {isAdmin && storeOptions.length > 0 && (
+                    <select
+                      value={storeFilter}
+                      onChange={e => { setStoreFilter(e.target.value); setSelectedUser(null); }}
+                      className="mt-2 w-full px-2 py-1.5 text-xs rounded-lg border border-brand-border bg-white text-brand-black
+                        focus:outline-none focus:ring-2 focus:ring-brand-red/30 focus:border-brand-red"
+                    >
+                      <option value="">🏢 Tüm Mağazalar</option>
+                      {storeOptions.map(s => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
+                  )}
                 </div>
 
                 {/* Canlı arama — isim, mağaza veya rol ile anlık filtreleme */}
