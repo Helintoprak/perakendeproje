@@ -68,7 +68,7 @@ async function runJob(jobId: string, docText: string, courseTitle: string, cours
   if (!job) return;
 
   job.status = 'processing';
-  const MAX_ATTEMPTS = 10;
+  const MAX_ATTEMPTS = 3;
 
   while (job.attempts < MAX_ATTEMPTS) {
     try {
@@ -90,37 +90,49 @@ async function runJob(jobId: string, docText: string, courseTitle: string, cours
       courseJobMap.delete(courseId);
       console.log(`[Job ${jobId.slice(-6)}] ✅ Quiz hazır — quizId: ${quiz.quizId}`);
 
-      // 10 dakika sonra bellekten temizle
       setTimeout(() => jobs.delete(jobId), 10 * 60 * 1000);
       return;
 
     } catch (err: any) {
       job.attempts++;
 
+      // Tam hata detayını logla
+      console.error(`[Job ${jobId.slice(-6)}] ❌ Hata detayı:`);
+      console.error(`  message : ${err?.message}`);
+      console.error(`  status  : ${err?.status ?? err?.httpStatus ?? 'N/A'}`);
+      console.error(`  code    : ${err?.code ?? 'N/A'}`);
+      console.error(`  stack   : ${err?.stack?.split('\n')[1]?.trim() ?? 'N/A'}`);
+
       if (isFatal(err)) {
         job.status = 'error';
-        job.error  = 'AI servisi kimlik doğrulama hatası. Lütfen sistem yöneticisiyle iletişime geçin. (API key geçersiz)';
+        job.error  = 'API anahtarı geçersiz veya yetkisiz. Lütfen sistem yöneticisiyle iletişime geçin.';
         courseJobMap.delete(courseId);
-        console.error(`[Job ${jobId.slice(-6)}] ❌ Fatal hata → job iptal: ${err.message}`);
+        console.error(`[Job ${jobId.slice(-6)}] ❌ Fatal (401/403) → job iptal edildi.`);
         setTimeout(() => jobs.delete(jobId), 30 * 60 * 1000);
         return;
       } else if (is429(err)) {
-        const waitSec = 65;
-        console.log(`[Job ${jobId.slice(-6)}] 429 kota aşıldı → ${waitSec}s bekleniyor (deneme ${job.attempts}/${MAX_ATTEMPTS})`);
+        // Exponential backoff: 2s, 4s, 8s
+        const waitSec = Math.pow(2, job.attempts);
+        console.error(`[Job ${jobId.slice(-6)}] ⏳ 429 İstek limiti aşıldı → ${waitSec}s bekleniyor (deneme ${job.attempts}/${MAX_ATTEMPTS})`);
         if (job.attempts < MAX_ATTEMPTS) await sleep(waitSec * 1000);
       } else {
-        const waitSec = 15;
-        console.error(`[Job ${jobId.slice(-6)}] Hata: ${err.message} → ${waitSec}s bekleniyor`);
+        const waitSec = 2;
+        console.error(`[Job ${jobId.slice(-6)}] ⚠️ Bilinmeyen hata → ${waitSec}s bekleniyor`);
         if (job.attempts < MAX_ATTEMPTS) await sleep(waitSec * 1000);
       }
     }
   }
 
-  // Maksimum denemeye ulaşıldı
+  // Son deneme sonucuna göre net hata mesajı
+  const lastErr = Array.from(jobs.values()).find(j => j.jobId === jobId);
+  const is429err = lastErr?.error?.includes('429') ?? false;
+
   job.status = 'error';
-  job.error  = 'Maksimum deneme sayısına ulaşıldı. AI servisi şu an yoğun, lütfen daha sonra tekrar deneyin.';
+  job.error  = is429err
+    ? 'API kotası doldu. Lütfen birkaç dakika sonra tekrar deneyin.'
+    : 'İstek limiti aşıldı. AI servisi şu an kullanılamıyor, lütfen daha sonra tekrar deneyin.';
   courseJobMap.delete(courseId);
-  console.error(`[Job ${jobId.slice(-6)}] ❌ Maksimum deneme aşıldı.`);
+  console.error(`[Job ${jobId.slice(-6)}] ❌ ${MAX_ATTEMPTS} denemede başarılanamadı → ${job.error}`);
   setTimeout(() => jobs.delete(jobId), 30 * 60 * 1000);
 }
 
@@ -218,15 +230,23 @@ async function generateWithGemini(docText: string, courseTitle: string): Promise
     const msg = String(err?.message ?? '');
     const s   = err?.status ?? err?.httpStatus ?? 0;
 
+    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     if (s === 404 || msg.includes('404') || msg.includes('MODEL_NOT_FOUND')) {
-      console.error(`━━━ ❌ GEMINI 404 — Model bulunamadı: "${MODEL}"`);
+      console.error(`❌ GEMINI 404 — Model bulunamadı: "${MODEL}"`);
+      console.error('   → Geçerli model adını kontrol edin.');
     } else if (is429(err)) {
-      console.error('━━━ ⏳ GEMINI 429 — Kota aşıldı, job sistemi yeniden deneyecek...');
+      console.error(`⏳ GEMINI 429 — İstek limiti / kota aşıldı`);
+      console.error(`   model  : ${MODEL}`);
+      console.error(`   key    : ${API_KEY.slice(0, 12)}...`);
+      console.error(`   mesaj  : ${msg}`);
+      console.error('   → https://aistudio.google.com adresinden kota durumunu kontrol edin.');
     } else if (s === 403 || msg.includes('API_KEY_INVALID')) {
-      console.error('━━━ ❌ GEMINI 403 — API anahtarı geçersiz');
+      console.error(`❌ GEMINI 403 — API anahtarı geçersiz`);
+      console.error(`   key : ${API_KEY.slice(0, 12)}...`);
     } else {
-      console.error(`━━━ ❌ GEMINI (${s}) — ${msg}`);
+      console.error(`❌ GEMINI (HTTP ${s}) — ${msg}`);
     }
+    console.error('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     throw err;
   }
 
