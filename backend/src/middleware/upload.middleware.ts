@@ -1,6 +1,7 @@
 import multer, { FileFilterCallback, StorageEngine } from 'multer';
 import { CloudinaryStorage } from 'multer-storage-cloudinary';
 import path from 'path';
+import fs from 'fs';
 import { Request } from 'express';
 import { cloudinary, isCloudinaryConfigured } from '../services/cloudinary.service';
 
@@ -15,13 +16,25 @@ const ALLOWED_CONTENT_MIME = [
 const ALLOWED_CONTENT_EXT = ['.pdf', '.pptx', '.ppt', '.mp4', '.webm', '.mov'];
 
 const UPLOADS_DIR = process.env.UPLOADS_DIR || path.join(__dirname, '../../uploads');
+// Dizin yoksa oluştur (Render gibi ortamlarda disk storage fallback için)
+if (!fs.existsSync(UPLOADS_DIR)) {
+  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+}
 
 const fileFilter = (_req: Request, file: Express.Multer.File, cb: FileFilterCallback) => {
   const ext = path.extname(file.originalname).toLowerCase();
-  if (ALLOWED_CONTENT_MIME.includes(file.mimetype) && ALLOWED_CONTENT_EXT.includes(ext)) {
+  // MIME kontrolü: bazı tarayıcılar PDF için farklı MIME gönderebilir
+  const mimeOk = ALLOWED_CONTENT_MIME.includes(file.mimetype) || file.mimetype === 'application/octet-stream';
+  const extOk  = ALLOWED_CONTENT_EXT.includes(ext);
+  if (mimeOk && extOk) {
     return cb(null, true);
   }
-  cb(new Error(`Geçersiz dosya tipi: "${ext}". PDF/PPTX/MP4 vb. desteklenir.`));
+  // multer v2'de cb(error) sessizce dosyayı atlıyor; Error nesnesini fırlat
+  const err = Object.assign(
+    new Error(`Geçersiz dosya tipi: "${ext}" (${file.mimetype}). PDF/PPTX/MP4 vb. desteklenir.`),
+    { code: 'INVALID_FILE_TYPE' }
+  );
+  cb(err as any);
 };
 
 /**
