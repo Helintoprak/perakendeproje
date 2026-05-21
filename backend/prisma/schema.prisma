@@ -220,6 +220,7 @@ model PerformanceActual {
   store       Store?        @relation(fields: [storeId], references: [storeId])
   user        User          @relation(fields: [userId], references: [userId])
 
+  @@unique([userId, kpiId, recordDate])
   @@index([kpiId])
   @@index([storeId])
   @@index([userId])
@@ -239,6 +240,7 @@ model PerformanceGoal {
   user        User          @relation(fields: [userId], references: [userId])
   store       Store?        @relation(fields: [storeId], references: [storeId])
 
+  @@unique([userId, kpiId, month, year])
   @@index([kpiId])
   @@index([userId])
   @@index([storeId])

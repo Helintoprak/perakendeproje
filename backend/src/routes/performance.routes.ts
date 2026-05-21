@@ -217,14 +217,19 @@ router.get('/store', async (req: AuthRequest, res) => {
   // Mağaza özeti: TÜM kullanıcıların (müdür dahil) toplamı
   const kpis = await prisma.kpiDefinition.findMany({ orderBy: { kpiId: 'asc' } });
   const storeSummary = kpis.map(kpi => {
-    const totalTarget = allGoals.filter(g => g.kpiId === kpi.kpiId).reduce((s, g) => s + Number(g.targetValue), 0);
+    const kpiGoals = allGoals.filter(g => g.kpiId === kpi.kpiId);
     const relevantActuals = actuals.filter(a => a.kpiId === kpi.kpiId);
+    let totalTarget: number;
     let totalActual: number;
     if (kpi.kpiId === 4) {
+      // UPT: hedef = toplam / mağazada çalışan sayısı; actual = ortalama
+      const staffCount = Math.max(staffIds.length, 1);
+      totalTarget = kpiGoals.reduce((s, g) => s + Number(g.targetValue), 0) / staffCount;
       totalActual = relevantActuals.length > 0
         ? relevantActuals.reduce((s, a) => s + Number(a.actualValue), 0) / relevantActuals.length
         : 0;
     } else {
+      totalTarget = kpiGoals.reduce((s, g) => s + Number(g.targetValue), 0);
       totalActual = relevantActuals.reduce((s, a) => s + Number(a.actualValue), 0);
     }
     const rate = totalTarget > 0 ? Math.min((totalActual / totalTarget) * 100, 999) : 0;
@@ -340,14 +345,19 @@ router.get('/admin', async (req: AuthRequest, res) => {
     const goals = allGoals.filter(g => staffIds.includes(g.userId));
 
     const storeSummary = kpis.map(kpi => {
-      const totalTarget = allGoals.filter(g => g.kpiId === kpi.kpiId).reduce((s, g) => s + Number(g.targetValue), 0);
+      const kpiGoals = allGoals.filter(g => g.kpiId === kpi.kpiId);
       const relevantActuals = actuals.filter(a => a.kpiId === kpi.kpiId);
+      let totalTarget: number;
       let totalActual: number;
       if (kpi.kpiId === 4) {
+        // UPT: hedef = toplam / mağazada çalışan sayısı; actual = ortalama
+        const staffCount = Math.max(staffIds.length, 1);
+        totalTarget = kpiGoals.reduce((s, g) => s + Number(g.targetValue), 0) / staffCount;
         totalActual = relevantActuals.length > 0
           ? relevantActuals.reduce((s, a) => s + Number(a.actualValue), 0) / relevantActuals.length
           : 0;
       } else {
+        totalTarget = kpiGoals.reduce((s, g) => s + Number(g.targetValue), 0);
         totalActual = relevantActuals.reduce((s, a) => s + Number(a.actualValue), 0);
       }
       const rate = totalTarget > 0 ? Math.min((totalActual / totalTarget) * 100, 999) : 0;
@@ -375,6 +385,12 @@ router.get('/admin', async (req: AuthRequest, res) => {
       }),
     ]);
 
+    // userId → storeId haritası (hedefler storeId içermiyor, user üzerinden resolve edilir)
+    const userStoreMap = new Map<number, number>();
+    for (const store of stores) {
+      for (const u of store.users) userStoreMap.set(u.userId, store.storeId);
+    }
+
     // Zincir geneli KPI özeti
     const chainSummary = kpis.map(kpi => {
       // Oran/ortalama KPI'ları: % birimli (MDO) ve UPT — mağaza bazında ortalanır
@@ -387,7 +403,7 @@ router.get('/admin', async (req: AuthRequest, res) => {
       let totalTarget: number;
 
       if (isRateKpi) {
-        // Her mağazanın aktüellerini ortalaması → mağaza ortalamalarının ortalaması
+        // Actual: her mağazanın kayıtlarının ortalaması → mağaza ortalamalarının ortalaması
         const storeActualMap = new Map<number, number[]>();
         for (const a of relevantActuals) {
           const sid = a.storeId ?? 0;
@@ -401,10 +417,11 @@ router.get('/admin', async (req: AuthRequest, res) => {
           ? storeMeans.reduce((s, v) => s + v, 0) / storeMeans.length
           : 0;
 
-        // Hedef de mağaza bazında ortalaması alınır
+        // Hedef: userId üzerinden mağaza bulunarak per-mağaza ortalama → zincir ortalaması
+        // (toplam UPT hedefi / mağaza sayısı)
         const storeGoalMap = new Map<number, number[]>();
         for (const g of relevantGoals) {
-          const sid = g.storeId ?? 0;
+          const sid = userStoreMap.get(g.userId) ?? 0;
           if (!storeGoalMap.has(sid)) storeGoalMap.set(sid, []);
           storeGoalMap.get(sid)!.push(Number(g.targetValue));
         }
@@ -428,15 +445,20 @@ router.get('/admin', async (req: AuthRequest, res) => {
       const userIds = store.users.map(u => u.userId);
       const storeGoals   = allGoals  .filter(g => userIds.includes(g.userId));
       const storeActuals = allActuals.filter(a => a.storeId === store.storeId);
+      const storeStaffCount = Math.max(userIds.length, 1);
       const storeSummary = kpis.map(kpi => {
-        const totalTarget = storeGoals.filter(g => g.kpiId === kpi.kpiId).reduce((s, g) => s + Number(g.targetValue), 0);
+        const kpiGoals = storeGoals.filter(g => g.kpiId === kpi.kpiId);
         const relevantActuals = storeActuals.filter(a => a.kpiId === kpi.kpiId);
+        let totalTarget: number;
         let totalActual: number;
         if (kpi.kpiId === 4) {
+          // UPT: hedef = toplam / mağazada çalışan sayısı; actual = ortalama
+          totalTarget = kpiGoals.reduce((s, g) => s + Number(g.targetValue), 0) / storeStaffCount;
           totalActual = relevantActuals.length > 0
             ? relevantActuals.reduce((s, a) => s + Number(a.actualValue), 0) / relevantActuals.length
             : 0;
         } else {
+          totalTarget = kpiGoals.reduce((s, g) => s + Number(g.targetValue), 0);
           totalActual = relevantActuals.reduce((s, a) => s + Number(a.actualValue), 0);
         }
         const rate = totalTarget > 0 ? Math.min((totalActual / totalTarget) * 100, 999) : 0;

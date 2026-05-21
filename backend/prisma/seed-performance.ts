@@ -312,9 +312,23 @@ async function main() {
     console.log(`   ↳ ${sect.month}/${sect.year}: ${storeRecordsInserted} mağaza işlendi`);
   }
 
-  // ── B) Personel blokları (Jan-26 / Feb-26) ───────────────────────────────
+  // ── B) Personel blokları (Jan-26 / Feb-26) — Batch mod ──────────────────
   // Sütun düzeni: 0 ay  1 MAĞAZA  2 İSİM  3 HEDEF  4 GERÇEKLEŞEN  5 UPT  6 %
+
+  // Tüm mağaza ve kullanıcıları tek seferde yükle
+  const allStores = await prisma.store.findMany({ select: { storeId: true, storeName: true } });
+  const storeMap  = new Map(allStores.map(s => [s.storeName.trim(), s.storeId]));
+
+  const allUsers = await prisma.user.findMany({
+    where: { roleId: 4 },
+    select: { userId: true, fullName: true, storeId: true },
+  });
+  const userMap = new Map(allUsers.map(u => [`${u.fullName.trim()}__${u.storeId}`, u.userId]));
+
+  const staffGoals:   any[] = [];
+  const staffActuals: any[] = [];
   let staffRecordsInserted = 0;
+
   for (const sect of personnelSections) {
     for (let r = sect.startRow; r <= sect.endRow; r++) {
       const row = rows[r];
@@ -323,11 +337,7 @@ async function main() {
       if (typeof monthLabel !== 'string') continue;
       const parsed = parseMonthLabel(monthLabel);
       if (!parsed) continue;
-
-      // Sadece Ocak (1) ve Şubat (2) aylarını işle
-      if (parsed.month !== 1 && parsed.month !== 2) {
-        continue;
-      }
+      if (parsed.month !== 1 && parsed.month !== 2) continue;
 
       const storeNameRaw = String(row[1] ?? '').trim();
       const fullName     = String(row[2] ?? '').trim();
@@ -338,22 +348,31 @@ async function main() {
       if (!storeNameRaw || !fullName) continue;
       if (/^(MAĞAZA|TOPLAM|GENEL)/i.test(fullName)) continue;
 
-      // Mağaza henüz oluşturulmadıysa "Genel" bölge ile oluştur
-      let store = await prisma.store.findFirst({ where: { storeName: storeNameRaw } });
-      if (!store) {
+      let storeId = storeMap.get(storeNameRaw);
+      if (!storeId) {
         const regionId = await ensureRegion('Genel');
-        store = await prisma.store.create({ data: { storeName: storeNameRaw, regionId } });
+        const s = await prisma.store.create({ data: { storeName: storeNameRaw, regionId } });
+        storeId = s.storeId;
+        storeMap.set(storeNameRaw, storeId);
       }
 
-      const userId     = await ensureStaff(fullName, store.storeId);
-      const recordDate = new Date(parsed.year, parsed.month - 1, 28);
+      let userId = userMap.get(`${fullName}__${storeId}`);
+      if (!userId) {
+        userId = await ensureStaff(fullName, storeId);
+        userMap.set(`${fullName}__${storeId}`, userId);
+      }
 
-      await upsertGoal  (userId, KPI.CIRO, target, parsed.month, parsed.year);
-      await upsertActual(userId, KPI.CIRO, actual, recordDate, store.storeId);
-      await upsertActual(userId, KPI.UPT,  upt,    recordDate, store.storeId);
+      const recordDate = new Date(parsed.year, parsed.month - 1, 28);
+      if (target > 0) staffGoals.push({ userId, kpiId: KPI.CIRO, targetValue: target, month: parsed.month, year: parsed.year });
+      if (actual > 0) staffActuals.push({ userId, kpiId: KPI.CIRO, actualValue: actual, recordDate, storeId });
+      if (upt    > 0) staffActuals.push({ userId, kpiId: KPI.UPT,  actualValue: upt,    recordDate, storeId });
       staffRecordsInserted++;
     }
   }
+
+  const CHUNK = 200;
+  for (let i = 0; i < staffGoals.length;   i += CHUNK) await prisma.performanceGoal  .createMany({ data: staffGoals  .slice(i, i + CHUNK), skipDuplicates: true });
+  for (let i = 0; i < staffActuals.length; i += CHUNK) await prisma.performanceActual.createMany({ data: staffActuals.slice(i, i + CHUNK), skipDuplicates: true });
   console.log(`   ↳ ${staffRecordsInserted} personel-ay kaydı işlendi`);
 
   console.log('');

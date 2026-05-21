@@ -135,7 +135,7 @@ function AdminHomeView() {
   const topStores = stores.slice().sort((a, b) => b.overallRate - a.overallRate).slice(0, 5);
 
   const ciro      = findKpi(summary, ['ciro']);
-  const satis     = findKpi(summary, ['satış adedi', 'satış']);
+  const satis     = findKpi(summary, ['satış adedi']);
   const fatura    = findKpi(summary, ['fatura sayısı', 'fatura']);
   const upt       = findKpi(summary, ['upt']);
   const mdo       = findKpi(summary, ['mdo', 'müşteri dönüşüm']);
@@ -237,7 +237,7 @@ function ManagerView() {
   const team         = teamData ?? [];
 
   const ciro      = findKpi(storeSummary, ['ciro']);
-  const satis     = findKpi(storeSummary, ['satış adedi', 'satış']);
+  const satis     = findKpi(storeSummary, ['satış adedi']);
   const fatura    = findKpi(storeSummary, ['fatura sayısı', 'fatura']);
   const upt       = findKpi(storeSummary, ['upt']);
   const mdo       = findKpi(storeSummary, ['mdo', 'müşteri dönüşüm']);
