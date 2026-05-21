@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, FormEvent } from 'react';
+import { useState, useMemo, FormEvent } from 'react';
 import { useApi } from '../hooks/useApi';
 import { useAuth } from '../context/AuthContext';
 import ProgressBar from '../components/ui/ProgressBar';
@@ -479,6 +479,19 @@ export default function CoursesPage() {
   );
 }
 
+interface LibraryItem {
+  id: number;
+  title: string;
+  fileUrl: string;
+  fileType: string;
+  createdAt: string;
+  uploader: { fullName: string };
+}
+interface LibraryResponse {
+  items: LibraryItem[];
+  total: number;
+}
+
 // ─── Eğitim Ekleme Formu (Manager/Deputy + Admin) ────────────────────────────
 
 function AssignForm({ categories, isSysAdmin, onSuccess }: {
@@ -495,8 +508,12 @@ function AssignForm({ categories, isSysAdmin, onSuccess }: {
     categoryId:  '',
     deadline:    '',
   });
-  const [file, setFile]                   = useState<File | null>(null);
-  const fileInputRef                      = useRef<HTMLInputElement>(null);
+  const [librarySearch, setLibrarySearch]     = useState('');
+  const [selectedLibItem, setSelectedLibItem] = useState<LibraryItem | null>(null);
+  const [showLibPicker, setShowLibPicker]     = useState(false);
+  const { data: libraryData, loading: libLoading } = useApi<LibraryResponse>(
+    showLibPicker ? `/library?limit=50${librarySearch ? `&search=${encodeURIComponent(librarySearch)}` : ''}` : ''
+  );
   const [selectedIds, setSelectedIds]     = useState<Set<number>>(new Set());
   const [mandatoryIds, setMandatoryIds]   = useState<Set<number>>(new Set());
   const [search, setSearch]               = useState('');
@@ -592,27 +609,30 @@ function AssignForm({ categories, isSysAdmin, onSuccess }: {
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!file) { setError('Lütfen bir PDF veya PPTX dosyası seçin.'); return; }
+    if (!selectedLibItem) { setError('Lütfen kütüphaneden bir dosya seçin.'); return; }
+    if (!form.title.trim()) { setError('Kurs başlığı zorunludur.'); return; }
     setSaving(true);
     setError('');
     try {
-      const fd = new FormData();
-      fd.append('file', file);
-      if (form.title.trim())       fd.append('title',       form.title.trim());
-      if (form.description.trim()) fd.append('description', form.description.trim());
-      if (form.duration)           fd.append('duration',    form.duration);
-      if (form.categoryId)         fd.append('categoryId',  form.categoryId);
-      if (form.deadline)           fd.append('deadline',    form.deadline);
-      fd.append('userIds',          JSON.stringify(selectedIds.size > 0 ? [...selectedIds] : []));
-      fd.append('mandatoryUserIds', JSON.stringify([...mandatoryIds]));
-      fd.append('parts',            JSON.stringify(parts));
-      fd.append('totalParts',       String(parts.length));
+      const body: Record<string, unknown> = {
+        title:          form.title.trim(),
+        description:    form.description.trim() || undefined,
+        duration:       form.duration || undefined,
+        categoryId:     form.categoryId || undefined,
+        deadline:       form.deadline || undefined,
+        libraryId:      selectedLibItem.id,
+        userIds:        selectedIds.size > 0 ? [...selectedIds] : [],
+        mandatoryUserIds: [...mandatoryIds],
+        parts,
+        totalParts:     parts.length,
+      };
 
-      const { data } = await api.post('/courses/upload', fd);
+      const { data } = await api.post('/courses/assign', body);
       setSuccess(data.message);
       setForm({ title: '', description: '', duration: '', categoryId: '', deadline: '' });
-      setFile(null);
-      if (fileInputRef.current) fileInputRef.current.value = '';
+      setSelectedLibItem(null);
+      setLibrarySearch('');
+      setShowLibPicker(false);
       setSelectedIds(new Set());
       setMandatoryIds(new Set());
       setSearch('');
@@ -695,47 +715,83 @@ function AssignForm({ categories, isSysAdmin, onSuccess }: {
           />
         </div>
 
-        {/* Dosya Yükleme */}
+        {/* Kütüphaneden Dosya Seç */}
         <div>
           <label className="block text-xs font-semibold text-brand-black mb-2">
-            Dosya <span className="text-brand-red">*</span>
-            <span className="ml-1 font-normal text-brand-gray">(PDF, PPTX veya Video)</span>
-          </label>
-          <label className={`flex items-center gap-3 p-4 rounded-xl border-2 border-dashed cursor-pointer transition-colors ${
-            file ? 'border-brand-red bg-brand-redLight' : 'border-brand-border bg-brand-lightGray hover:border-brand-red'
-          }`}>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".pdf,.pptx,.ppt,.mp4,.webm,.mov,video/*"
-              className="hidden"
-              onChange={e => setFile(e.target.files?.[0] ?? null)}
-            />
-            <span className="text-2xl">
-              {file
-                ? (file.name.toLowerCase().endsWith('.pdf') ? '📄'
-                   : file.type.startsWith('video/') ? '🎬'
-                   : '📊')
-                : '📁'}
-            </span>
-            <div className="flex-1 min-w-0">
-              {file ? (
-                <>
-                  <p className="text-sm font-semibold text-brand-black truncate">{file.name}</p>
-                  <p className="text-xs text-brand-gray">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
-                </>
-              ) : (
-                <p className="text-sm text-brand-gray">Dosya seçmek için tıklayın</p>
-              )}
-            </div>
-            {file && (
-              <button type="button"
-                onClick={e => { e.preventDefault(); setFile(null); if (fileInputRef.current) fileInputRef.current.value = ''; }}
-                className="text-brand-gray hover:text-brand-red text-lg shrink-0">✕
-              </button>
-            )}
+            Kütüphaneden Dosya <span className="text-brand-red">*</span>
           </label>
 
+          {selectedLibItem ? (
+            <div className="flex items-center gap-3 p-4 rounded-xl border-2 border-brand-red bg-brand-redLight">
+              <span className="text-2xl">
+                {selectedLibItem.fileType === 'pdf' ? '📄' : selectedLibItem.fileType === 'video' ? '🎬' : '📊'}
+              </span>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-brand-black truncate">{selectedLibItem.title}</p>
+                <p className="text-xs text-brand-gray uppercase">{selectedLibItem.fileType}</p>
+              </div>
+              <button type="button"
+                onClick={() => { setSelectedLibItem(null); setShowLibPicker(false); }}
+                className="text-brand-gray hover:text-brand-red text-lg shrink-0">✕
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowLibPicker(s => !s)}
+              className={`w-full flex items-center gap-3 p-4 rounded-xl border-2 border-dashed transition-colors text-left ${
+                showLibPicker
+                  ? 'border-brand-red bg-brand-redLight'
+                  : 'border-brand-border bg-brand-lightGray hover:border-brand-red'
+              }`}
+            >
+              <span className="text-2xl">📚</span>
+              <span className="text-sm text-brand-gray">
+                {showLibPicker ? 'Kütüphane arama paneli açık — aşağıdan seçin' : 'Kütüphaneden seç…'}
+              </span>
+            </button>
+          )}
+
+          {showLibPicker && !selectedLibItem && (
+            <div className="mt-2 border border-brand-border rounded-xl overflow-hidden shadow-sm">
+              <div className="p-3 border-b border-brand-border bg-brand-lightGray">
+                <input
+                  type="text"
+                  placeholder="Dosya adı ara..."
+                  value={librarySearch}
+                  onChange={e => setLibrarySearch(e.target.value)}
+                  className="w-full px-3 py-2 text-sm rounded-lg border border-brand-border bg-white
+                    focus:outline-none focus:ring-2 focus:ring-brand-red/30 focus:border-brand-red"
+                />
+              </div>
+              <div className="max-h-52 overflow-y-auto divide-y divide-brand-border">
+                {libLoading ? (
+                  <div className="flex justify-center py-6">
+                    <span className="w-5 h-5 border-2 border-brand-red border-t-transparent rounded-full animate-spin" />
+                  </div>
+                ) : (libraryData?.items ?? []).length === 0 ? (
+                  <p className="text-sm text-brand-gray text-center py-6">Dosya bulunamadı</p>
+                ) : (
+                  (libraryData?.items ?? []).map(item => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => { setSelectedLibItem(item); setShowLibPicker(false); }}
+                      className="w-full flex items-center gap-3 px-4 py-3 hover:bg-brand-redLight transition-colors text-left"
+                    >
+                      <span className="text-lg shrink-0">
+                        {item.fileType === 'pdf' ? '📄' : item.fileType === 'video' ? '🎬' : '📊'}
+                      </span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-brand-black truncate">{item.title}</p>
+                        <p className="text-xs text-brand-gray uppercase">{item.fileType}</p>
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Süre + Son Tarih */}

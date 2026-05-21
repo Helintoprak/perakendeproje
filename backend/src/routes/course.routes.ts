@@ -112,8 +112,17 @@ router.post('/assign', requireRole(...CAN_MANAGE), async (req: AuthRequest, res:
     const storeId = isAdminUser ? null : (req.user!.storeId ?? null);
     if (!isAdminUser && !storeId) return res.status(400).json({ message: 'Mağaza bilgisi bulunamadı.' });
 
-    const { title, description, contentUrl, duration, categoryId, deadline, userIds, mandatoryUserIds } = req.body;
+    const { title, description, contentUrl, libraryId, duration, categoryId, deadline, userIds, mandatoryUserIds } = req.body;
     if (!title?.trim()) return res.status(400).json({ message: 'Kurs başlığı zorunludur.' });
+
+    // libraryId ile contentUrl çözümle
+    let resolvedContentUrl: string | null = contentUrl?.trim() || null;
+    const parsedLibraryId: number | null = libraryId ? parseInt(libraryId) : null;
+    if (parsedLibraryId) {
+      const libItem = await prisma.educationLibrary.findUnique({ where: { id: parsedLibraryId } });
+      if (!libItem) return res.status(404).json({ message: 'Seçilen kütüphane öğesi bulunamadı.' });
+      resolvedContentUrl = libItem.fileUrl;
+    }
 
     let rawParts: unknown[] = [];
     try { rawParts = JSON.parse(req.body.parts ?? '[]'); } catch { /* ok */ }
@@ -132,7 +141,8 @@ router.post('/assign', requireRole(...CAN_MANAGE), async (req: AuthRequest, res:
         data: {
           title:       title.trim(),
           description: description?.trim() || null,
-          contentUrl:  contentUrl?.trim()  || null,
+          contentUrl:  resolvedContentUrl,
+          libraryId:   parsedLibraryId,
           duration:    duration   ? parseInt(duration)   : null,
           categoryId:  categoryId ? parseInt(categoryId) : null,
           totalParts,

@@ -13,6 +13,7 @@ import EkipYonetimi from './pages/EkipYonetimi';
 import AdminPage from './pages/AdminPage';
 import MeetingPage from './pages/MeetingPage';
 import SystemLogsPage from './pages/SystemLogsPage';
+import LibraryPage from './pages/LibraryPage';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth();
@@ -51,6 +52,7 @@ function AppRoutes() {
         <Route path="meeting" element={<MeetingPage />} />
         <Route path="meeting/:meetingId" element={<MeetingPage />} />
         <Route path="logs" element={<SystemLogsPage />} />
+        <Route path="library" element={<LibraryPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/home" replace />} />
     </Routes>

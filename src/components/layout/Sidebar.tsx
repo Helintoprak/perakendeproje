@@ -113,22 +113,29 @@ export default function Sidebar({ open, onClose }: Props) {
                   Yönetim
                 </p>
               </div>
-              <NavLink
-                to="/team"
-                onClick={onClose}
-                className={({ isActive }) => `
-                  flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-bold
-                  transition-all duration-200
-                  ${isActive
-                    ? 'bg-white text-brand-red shadow-xl scale-[1.02]'
-                    : 'text-white/80 hover:bg-white/10 hover:text-white'}
-                `}
-              >
-                <span>Ekip Yönetimi</span>
-                {location.pathname.startsWith('/team') && (
-                  <span className="ml-auto w-2 h-2 rounded-full bg-brand-red" />
-                )}
-              </NavLink>
+              {[
+                { path: '/team',    label: 'Ekip Yönetimi' },
+                { path: '/library', label: 'Kütüphane' },
+              ].map(item => {
+                const active = location.pathname.startsWith(item.path);
+                return (
+                  <NavLink
+                    key={item.path}
+                    to={item.path}
+                    onClick={onClose}
+                    className={`
+                      flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-bold
+                      transition-all duration-200
+                      ${active
+                        ? 'bg-white text-brand-red shadow-xl scale-[1.02]'
+                        : 'text-white/80 hover:bg-white/10 hover:text-white'}
+                    `}
+                  >
+                    <span>{item.label}</span>
+                    {active && <span className="ml-auto w-2 h-2 rounded-full bg-brand-red" />}
+                  </NavLink>
+                );
+              })}
             </>
           )}
 
@@ -141,9 +148,10 @@ export default function Sidebar({ open, onClose }: Props) {
                 </p>
               </div>
               {[
-                { path: '/admin', label: 'Merkezi Yönetim' },
-                { path: '/team',  label: 'Ekip Yönetimi' },
-                { path: '/logs',  label: 'Sistem Logları' },
+                { path: '/admin',   label: 'Merkezi Yönetim' },
+                { path: '/team',    label: 'Ekip Yönetimi' },
+                { path: '/library', label: 'Kütüphane' },
+                { path: '/logs',    label: 'Sistem Logları' },
               ].map(item => {
                 const active = location.pathname.startsWith(item.path);
                 return (

@@ -68,6 +68,7 @@ model User {
   partProgress         UserPartProgress[]
   uploadedEducations   Education[]           @relation("EducationUploader")
   educationAssignments EducationAssignment[] @relation("EducationAssignee")
+  libraryUploads       EducationLibrary[]    @relation("LibraryUploader")
   shifts               Shift[]
   leaveRequests        LeaveRequest[]
   promotions           PromotionLog[]        @relation("PromotedUser")
@@ -88,6 +89,20 @@ model CourseCategory {
   @@map("course_categories")
 }
 
+model EducationLibrary {
+  id         Int      @id @default(autoincrement())
+  title      String   @db.VarChar(255)
+  fileUrl    String   @db.VarChar(1024)
+  fileType   String   @default("pdf") @db.VarChar(20)
+  createdAt  DateTime @default(now())
+  uploadedBy Int
+  uploader   User     @relation("LibraryUploader", fields: [uploadedBy], references: [userId])
+  courses    Course[]
+
+  @@index([uploadedBy])
+  @@map("education_library")
+}
+
 model Course {
   courseId          Int                @id @default(autoincrement()) @map("CourseID")
   title             String             @map("Title") @db.VarChar(150)
@@ -97,14 +112,17 @@ model Course {
   duration          Int?               @map("Duration")
   categoryId        Int?               @map("CategoryID")
   totalParts        Int                @default(1) @map("TotalParts")
+  libraryId         Int?               @map("LibraryID")
   courseAssignments CourseAssignment[]
   category          CourseCategory?    @relation(fields: [categoryId], references: [categoryId])
+  library           EducationLibrary?  @relation(fields: [libraryId], references: [id])
   quizzes           Quiz[]
   userProgress      UserProgress[]
   parts             CoursePart[]
   partProgress      UserPartProgress[]
 
   @@index([categoryId])
+  @@index([libraryId])
   @@map("courses")
 }
 
