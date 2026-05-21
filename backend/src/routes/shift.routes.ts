@@ -89,6 +89,38 @@ router.get(
   },
 );
 
+// ─── GET /api/team/training-stats ────────────────────────────────────────────
+// Admin: zincir geneli, Müdür: kendi mağazası
+router.get('/training-stats', async (req: AuthRequest, res: Response) => {
+  try {
+    const role    = req.user!.roleName;
+    const isAdmin = role === ADMIN_ROLE;
+    const isMgr   = ['Mağaza Müdürü', 'Mağaza Müdür Yardımcısı'].includes(role);
+    if (!isAdmin && !isMgr) return res.status(403).json({ message: 'Yetkisiz.' });
+
+    const storeId = req.user!.storeId;
+
+    const [total, completed] = await Promise.all([
+      prisma.courseAssignment.count({
+        where: isAdmin ? {} : { user: { storeId: storeId ?? undefined } },
+      }),
+      prisma.userProgress.count({
+        where: {
+          status: 'completed',
+          ...(isAdmin ? {} : { user: { storeId: storeId ?? undefined } }),
+        },
+      }),
+    ]);
+
+    const rate = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+    return res.json({ total, completed, rate });
+  } catch (err: any) {
+    console.error('[training-stats]', err.message);
+    return res.status(500).json({ message: 'Eğitim istatistikleri alınamadı.' });
+  }
+});
+
 // ─── POST /api/team/remind/:userId ───────────────────────────────────────────
 router.post(
   '/remind/:userId',

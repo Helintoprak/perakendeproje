@@ -5,20 +5,19 @@ import SporthinkLogo from '../ui/SporthinkLogo';
 interface NavItem {
   path: string;
   label: string;
-  icon: string;
   managerOnly?: boolean;
   hideForAdmin?: boolean;
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { path: '/home',        label: 'Anasayfa',          icon: '🏠' },
-  { path: '/courses',     label: 'Eğitimlerim',       icon: '📚' },
-  { path: '/profile',     label: 'Gelişim Dosyam',    icon: '🏅', hideForAdmin: true },
-  { path: '/performance', label: 'Performans Takibi', icon: '📊' },
-  { path: '/feedback',    label: 'Geri Bildirim',     icon: '💬' },
-  { path: '/pulse',       label: 'Nabız Anketi',      icon: '💓' },
-  { path: '/community',  label: 'Topluluk',          icon: '🌐' },
-  { path: '/meeting',    label: 'Toplantı',          icon: '🎥' },
+  { path: '/home',        label: 'Anasayfa' },
+  { path: '/courses',     label: 'Eğitimlerim' },
+  { path: '/profile',     label: 'Gelişim Dosyam', hideForAdmin: true },
+  { path: '/performance', label: 'Performans Takibi' },
+  { path: '/feedback',    label: 'Geri Bildirim' },
+  { path: '/pulse',       label: 'Nabız Anketi' },
+  { path: '/community',   label: 'Topluluk' },
+  { path: '/meeting',     label: 'Toplantı' },
 ];
 
 interface Props {
@@ -78,7 +77,6 @@ export default function Sidebar({ open, onClose }: Props) {
           </div>
           {user?.store && (
             <div className="mt-2 flex items-center gap-2 text-xs text-white/80 bg-black/20 rounded-lg px-2.5 py-1.5 border border-white/5">
-              <span className="text-sm">🏪</span>
               <span className="truncate font-medium">{user.store}</span>
             </div>
           )}
@@ -95,15 +93,12 @@ export default function Sidebar({ open, onClose }: Props) {
                 onClick={onClose}
                 className={`
                   flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-bold
-                  transition-all duration-200 group
+                  transition-all duration-200
                   ${active
                     ? 'bg-white text-brand-red shadow-xl scale-[1.02]'
                     : 'text-white/80 hover:bg-white/10 hover:text-white'}
                 `}
               >
-                <span className={`text-lg leading-none transition-transform duration-200 ${active ? 'scale-110' : 'group-hover:scale-110'}`}>
-                  {item.icon}
-                </span>
                 <span>{item.label}</span>
                 {active && <span className="ml-auto w-2 h-2 rounded-full bg-brand-red" />}
               </NavLink>
@@ -122,16 +117,13 @@ export default function Sidebar({ open, onClose }: Props) {
                 to="/team"
                 onClick={onClose}
                 className={({ isActive }) => `
-                  flex items-center gap-4 px-4 py-3.5 rounded-xl text-sm font-bold
-                  transition-all duration-200 group
+                  flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-bold
+                  transition-all duration-200
                   ${isActive
                     ? 'bg-white text-brand-red shadow-xl scale-[1.02]'
                     : 'text-white/80 hover:bg-white/10 hover:text-white'}
                 `}
               >
-                <span className={`text-lg leading-none transition-transform duration-200 ${location.pathname.startsWith('/team') ? 'scale-110' : 'group-hover:scale-110'}`}>
-                  👥
-                </span>
                 <span>Ekip Yönetimi</span>
                 {location.pathname.startsWith('/team') && (
                   <span className="ml-auto w-2 h-2 rounded-full bg-brand-red" />
@@ -149,9 +141,9 @@ export default function Sidebar({ open, onClose }: Props) {
                 </p>
               </div>
               {[
-                { path: '/admin', label: 'Merkezi Yönetim', icon: '🏢' },
-                { path: '/team',  label: 'Ekip Yönetimi',   icon: '👥' },
-                { path: '/logs',  label: 'Sistem Logları',   icon: '📋' },
+                { path: '/admin', label: 'Merkezi Yönetim' },
+                { path: '/team',  label: 'Ekip Yönetimi' },
+                { path: '/logs',  label: 'Sistem Logları' },
               ].map(item => {
                 const active = location.pathname.startsWith(item.path);
                 return (
@@ -161,15 +153,12 @@ export default function Sidebar({ open, onClose }: Props) {
                     onClick={onClose}
                     className={`
                       flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-bold
-                      transition-all duration-200 group
+                      transition-all duration-200
                       ${active
                         ? 'bg-white text-brand-red shadow-xl scale-[1.02]'
                         : 'text-white/80 hover:bg-white/10 hover:text-white'}
                     `}
                   >
-                    <span className={`text-lg leading-none transition-transform duration-200 ${active ? 'scale-110' : 'group-hover:scale-110'}`}>
-                      {item.icon}
-                    </span>
                     <span>{item.label}</span>
                     {active && <span className="ml-auto w-2 h-2 rounded-full bg-brand-red" />}
                   </NavLink>
@@ -185,7 +174,6 @@ export default function Sidebar({ open, onClose }: Props) {
             onClick={logout}
             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-bold text-white/80 hover:bg-white hover:text-brand-red transition-all duration-300 group shadow-sm hover:shadow-xl"
           >
-            <span className="text-xl group-hover:rotate-12 transition-transform">🚪</span>
             <span>Çıkış Yap</span>
           </button>
         </div>
