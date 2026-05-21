@@ -178,9 +178,7 @@ router.post(
   '/upload',
   requireRole(...CAN_MANAGE),
   (req: Request, res: Response, next: NextFunction) => {
-    upload.fields([
-      { name: 'file', maxCount: 1 },
-    ])(req, res, (err) => {
+    upload.single('file')(req, res, (err) => {
       if (err) return handleUploadError(err, req, res, next);
       next();
     });
@@ -191,9 +189,7 @@ router.post(
       const storeId = isAdminUser ? null : (req.user!.storeId ?? null);
       if (!isAdminUser && !storeId) return res.status(400).json({ message: 'Mağaza bilgisi bulunamadı.' });
 
-      // .fields() kullandığımız için req.file yerine req.files (alan adına göre indekslenir)
-      const files = req.files as { [field: string]: Express.Multer.File[] } | undefined;
-      const contentFile = files?.file?.[0];
+      const contentFile = req.file;
 
       if (!contentFile) {
         return res.status(400).json({ message: 'Dosya yüklenmedi. Lütfen bir PDF/PPTX/Video seçin.' });
