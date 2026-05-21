@@ -2,12 +2,15 @@ import { Router, Response }  from 'express';
 import { PrismaClient }       from '@prisma/client';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { authenticate, requireRole, AuthRequest } from '../middleware/auth.middleware';
-import path     from 'path';
-import fs       from 'fs';
-import pdfParse from 'pdf-parse';
+import path from 'path';
+import fs   from 'fs';
+// pdf-parse v1.x import sırasında test dosyası okumaya çalışır → production'da crash.
+// Lib yolundan doğrudan import ederek test runner'ı atlatıyoruz.
+// eslint-disable-next-line @typescript-eslint/no-require-imports, @typescript-eslint/no-explicit-any
+const pdfParse: (buf: Buffer) => Promise<{ text: string }> = require('pdf-parse/lib/pdf-parse.js');
 
 // ─── Yapılandırma ─────────────────────────────────────────────────────────────
-const MODEL       = 'gemini-flash-lite-latest';
+const MODEL       = 'gemini-1.5-flash-latest';
 const PASS_SCORE  = 7;
 const MAX_CHARS   = 20_000;
 const UPLOADS_DIR = process.env.UPLOADS_DIR || path.join(__dirname, '../../uploads');
