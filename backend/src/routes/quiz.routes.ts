@@ -56,7 +56,11 @@ function is429(err: any): boolean {
 function isFatal(err: any): boolean {
   const msg = String(err?.message ?? '');
   const s   = err?.status ?? err?.httpStatus ?? 0;
-  return s === 403 || s === 401 || msg.includes('API_KEY_INVALID') || msg.includes('PERMISSION_DENIED');
+  return (
+    s === 403 || s === 401 || s === 404 ||
+    msg.includes('API_KEY_INVALID') || msg.includes('PERMISSION_DENIED') ||
+    msg.includes('404') || msg.includes('MODEL_NOT_FOUND') || msg.includes('is not found')
+  );
 }
 
 function sleep(ms: number) {
@@ -69,6 +73,7 @@ async function runJob(jobId: string, docText: string, courseTitle: string, cours
 
   job.status = 'processing';
   const MAX_ATTEMPTS = 3;
+  let lastErrType: 'rate_limit' | 'fatal' | 'other' = 'other';
 
   while (job.attempts < MAX_ATTEMPTS) {
     try {
@@ -96,41 +101,38 @@ async function runJob(jobId: string, docText: string, courseTitle: string, cours
     } catch (err: any) {
       job.attempts++;
 
-      // Tam hata detayını logla
-      console.error(`[Job ${jobId.slice(-6)}] ❌ Hata detayı:`);
+      console.error(`[Job ${jobId.slice(-6)}] ❌ Hata (deneme ${job.attempts}/${MAX_ATTEMPTS}):`);
       console.error(`  message : ${err?.message}`);
       console.error(`  status  : ${err?.status ?? err?.httpStatus ?? 'N/A'}`);
-      console.error(`  code    : ${err?.code ?? 'N/A'}`);
-      console.error(`  stack   : ${err?.stack?.split('\n')[1]?.trim() ?? 'N/A'}`);
 
       if (isFatal(err)) {
+        lastErrType = 'fatal';
+        const msg = String(err?.message ?? '');
+        const isModelErr = msg.includes('404') || msg.includes('MODEL_NOT_FOUND') || msg.includes('is not found');
         job.status = 'error';
-        job.error  = 'API anahtarı geçersiz veya yetkisiz. Lütfen sistem yöneticisiyle iletişime geçin.';
+        job.error  = isModelErr
+          ? 'AI modeli bulunamadı. Sistem yöneticisiyle iletişime geçin.'
+          : 'API anahtarı geçersiz veya yetkisiz. Lütfen sistem yöneticisiyle iletişime geçin.';
         courseJobMap.delete(courseId);
-        console.error(`[Job ${jobId.slice(-6)}] ❌ Fatal (401/403) → job iptal edildi.`);
+        console.error(`[Job ${jobId.slice(-6)}] ❌ Fatal → job iptal edildi: ${job.error}`);
         setTimeout(() => jobs.delete(jobId), 30 * 60 * 1000);
         return;
       } else if (is429(err)) {
-        // Exponential backoff: 2s, 4s, 8s
+        lastErrType = 'rate_limit';
         const waitSec = Math.pow(2, job.attempts);
-        console.error(`[Job ${jobId.slice(-6)}] ⏳ 429 İstek limiti aşıldı → ${waitSec}s bekleniyor (deneme ${job.attempts}/${MAX_ATTEMPTS})`);
+        console.error(`[Job ${jobId.slice(-6)}] ⏳ 429 İstek limiti → ${waitSec}s bekleniyor`);
         if (job.attempts < MAX_ATTEMPTS) await sleep(waitSec * 1000);
       } else {
-        const waitSec = 2;
-        console.error(`[Job ${jobId.slice(-6)}] ⚠️ Bilinmeyen hata → ${waitSec}s bekleniyor`);
-        if (job.attempts < MAX_ATTEMPTS) await sleep(waitSec * 1000);
+        console.error(`[Job ${jobId.slice(-6)}] ⚠️ Bilinmeyen hata → 2s bekleniyor`);
+        if (job.attempts < MAX_ATTEMPTS) await sleep(2000);
       }
     }
   }
 
-  // Son deneme sonucuna göre net hata mesajı
-  const lastErr = Array.from(jobs.values()).find(j => j.jobId === jobId);
-  const is429err = lastErr?.error?.includes('429') ?? false;
-
   job.status = 'error';
-  job.error  = is429err
+  job.error  = lastErrType === 'rate_limit'
     ? 'API kotası doldu. Lütfen birkaç dakika sonra tekrar deneyin.'
-    : 'İstek limiti aşıldı. AI servisi şu an kullanılamıyor, lütfen daha sonra tekrar deneyin.';
+    : 'AI servisi yanıt vermedi. Lütfen daha sonra tekrar deneyin.';
   courseJobMap.delete(courseId);
   console.error(`[Job ${jobId.slice(-6)}] ❌ ${MAX_ATTEMPTS} denemede başarılanamadı → ${job.error}`);
   setTimeout(() => jobs.delete(jobId), 30 * 60 * 1000);
